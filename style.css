@@ -1,0 +1,481 @@
+:root {
+    --bg: #FAFAFA;
+    --card-bg: #FFFFFF;
+    --text-main: #111111;
+    --text-muted: #555555;
+    --gold: #FFD700;
+    --silver: #C0C0C0;
+    --bronze: #CD7F32;
+    --accent: #000000;
+    --border: rgba(0, 0, 0, 0.08);
+
+    --font-title: 'Sora', sans-serif;
+    --font-body: 'Inter', sans-serif;
+
+    --transition-smooth: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.dark-mode {
+    --bg: #121212;
+    --card-bg: #1E1E1E;
+    --text-main: #EAEAEA;
+    --text-muted: #AAAAAA;
+    --accent: #FFFFFF;
+    --border: rgba(255, 255, 255, 0.1);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    overflow-y: scroll;
+}
+
+body {
+    background-color: var(--bg);
+    color: var(--text-main);
+    font-family: var(--font-body);
+    overflow-x: hidden;
+    line-height: 1.5;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+#app {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+    min-height: 100vh;
+    position: relative;
+}
+
+/* Settings & Nav */
+.settings-nav {
+    position: absolute;
+    top: 2rem;
+    right: 2rem;
+    z-index: 100;
+}
+
+.icon-btn {
+    background: none;
+    border: none;
+    color: var(--text-main);
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 50%;
+    transition: var(--transition-smooth);
+}
+
+.icon-btn:hover {
+    background: var(--border);
+}
+
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-content {
+    position: absolute;
+    right: 0;
+    background-color: var(--card-bg);
+    min-width: 200px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    padding: 1rem;
+    z-index: 101;
+    border: 1px solid var(--border);
+    margin-top: 0.5rem;
+}
+
+.menu-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+/* Switch UI */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked+.slider {
+    background-color: var(--gold);
+}
+
+input:checked+.slider:before {
+    transform: translateX(18px);
+}
+
+.slider.round {
+    border-radius: 34px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Header */
+.header {
+    text-align: center;
+    margin-bottom: 5rem;
+    transform-origin: left center;
+}
+
+.logo {
+    font-family: var(--font-title);
+    font-size: 3rem;
+    font-weight: 800;
+    letter-spacing: -0.05rem;
+    margin-bottom: 0.5rem;
+}
+
+.subtitle {
+    font-size: 1rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+/* Ranking Items */
+.ranking-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+}
+
+.ranking-item {
+    background: var(--card-bg);
+    padding: 1.5rem 2rem;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: var(--transition-smooth);
+    opacity: 0;
+}
+
+.ranking-item:hover {
+    transform: scale(1.02);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.06);
+}
+
+.ranking-item svg {
+    margin-left: auto;
+    opacity: 0.7;
+    color: var(--text-muted);
+    transition: var(--transition-smooth);
+}
+
+.rank-number {
+    font-family: var(--font-title);
+    font-size: 2.2rem;
+    font-weight: 800;
+    margin-right: 2rem;
+    color: var(--text-muted);
+}
+
+/* Medals for Top 3 - Soft Multi-Stop CSS Gradients */
+.top-1,
+.top-2,
+.top-3 {
+    position: relative;
+    overflow: hidden;
+}
+
+.top-1 {
+    border-color: #ff9100;
+    background: linear-gradient(90deg,
+            rgba(255, 145, 0, 0.05) 0%,
+            rgba(255, 225, 0, 0.12) 30%,
+            rgba(255, 153, 0, 0.05) 75%,
+            rgba(255, 225, 0, 0.12) 100%);
+}
+
+.top-2 {
+    border-color: #b0b0b0;
+    background: linear-gradient(90deg,
+            rgba(160, 160, 160, 0.08) 0%,
+            rgba(220, 220, 220, 0.15) 30%,
+            rgba(140, 140, 140, 0.08) 75%,
+            rgba(220, 220, 220, 0.15) 100%);
+}
+
+.top-3 {
+    border-color: #cd7f32;
+    background: linear-gradient(90deg,
+            rgba(139, 69, 19, 0.05) 0%,
+            rgba(205, 127, 50, 0.12) 30%,
+            rgba(101, 67, 33, 0.05) 75%,
+            rgba(205, 127, 50, 0.12) 100%);
+}
+
+/* Glass Effect Animation */
+.top-1::after,
+.top-2::after,
+.top-3::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -150%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg,
+            transparent,
+            rgba(255, 255, 255, 0.3),
+            transparent);
+    transform: skewX(-20deg);
+    animation: glass-shimmer 4s infinite ease-in-out;
+    pointer-events: none;
+}
+
+@keyframes glass-shimmer {
+    0% {
+        left: -150%;
+    }
+
+    40%,
+    100% {
+        left: 150%;
+    }
+}
+
+.top-1 .rank-number {
+    color: #ff9100;
+}
+
+.top-2 .rank-number {
+    color: #888;
+}
+
+.top-3 .rank-number {
+    color: #cd7f32;
+}
+
+.restaurant-name {
+    font-family: var(--font-title);
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+/* Detail View */
+.back-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-weight: 600;
+    margin-bottom: 2rem;
+    transition: var(--transition-smooth);
+}
+
+/* View Management */
+.view {
+    transition: var(--transition-smooth);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Tabs */
+.tabs-container {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding: 0.5rem;
+    position: sticky;
+    top: 100px;
+    z-index: 50;
+    pointer-events: none;
+    /* Let clicks through container */
+}
+
+.tab-btn {
+    pointer-events: auto;
+    /* Buttons need clicks */
+    padding: 0.8rem 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 12px;
+    font-family: var(--font-title);
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+
+    /* Glossy/Glass effect: More transparent top, more opaque bottom */
+    background: linear-gradient(to bottom,
+            rgba(255, 255, 255, 0.1) 0%,
+            rgba(255, 255, 255, 0.6) 100%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    color: var(--text-color);
+}
+
+.tab-btn:hover {
+    transform: translateY(-2px);
+    background: linear-gradient(to bottom,
+            rgba(255, 255, 255, 0.2) 0%,
+            rgba(255, 255, 255, 0.8) 100%);
+}
+
+.tab-btn.active {
+    background: var(--card-bg);
+    border-color: var(--gold);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    color: var(--gold);
+}
+
+.dark-mode .tab-btn {
+    background: linear-gradient(to bottom,
+            rgba(30, 30, 30, 0.2) 0%,
+            rgba(30, 30, 30, 0.7) 100%);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-color);
+}
+
+.dark-mode .tab-btn.active {
+    background: #2a2a2a;
+    color: var(--gold);
+}
+
+/* Tab Content */
+.tab-content {
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.about-card {
+    background: var(--card-bg);
+    padding: 2.5rem;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    line-height: 1.8;
+}
+
+.map-placeholder iframe {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+}
+
+.visit-card {
+    background: var(--card-bg);
+    padding: 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+    border: 1px solid var(--border);
+}
+
+.visit-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.8rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.visit-date {
+    font-weight: 800;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--gold);
+}
+
+.sub-tabs {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.sub-tab-btn {
+    padding: 0.4rem 0.8rem;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.02);
+    color: var(--text-muted);
+    transition: var(--transition-smooth);
+}
+
+.sub-tab-btn.active {
+    background: var(--gold);
+    color: white;
+    border-color: var(--gold);
+}
+
+.dark-mode .sub-tab-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .sub-tab-btn.active {
+    background: var(--gold);
+    color: black;
+}
+
+.sub-tab-content {
+    animation: fadeIn 0.4s ease-out;
+}
+
+.gallery-img {
+    border-radius: 12px;
+    transition: transform 0.3s ease;
+}
+
+.gallery-img:hover {
+    transform: scale(1.03);
+}
