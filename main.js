@@ -152,12 +152,22 @@ function renderRanking() {
         else if (rank === 2) medalClass = 'top-2';
         else if (rank === 3) medalClass = 'top-3';
 
+        const visitDate = res.date || res.fecha || '';
+        const rating = res.rating || '0';
+
         item.className = `ranking-item ${medalClass}`;
         item.innerHTML = `
             <div class="rank-number">${rank}</div>
             <div class="restaurant-info">
-                <h3 class="restaurant-name">${res.name}</h3>
-                <p class="restaurant-rating">${res.location || 'Luxury'} • ${res.rating}/10</p>
+                <div class="restaurant-name-row">
+                    <h3 class="restaurant-name">${res.name}</h3>
+                    ${visitDate ? `<span class="restaurant-date">${visitDate}</span>` : ''}
+                </div>
+                <p class="restaurant-location">${res.location || 'Luxury'}</p>
+            </div>
+            <div class="score-box">
+                <div class="score-label">Puntaje</div>
+                <div class="score-value">${rating}</div>
             </div>
             <i data-lucide="arrow-right-circle"></i>
         `;
@@ -169,38 +179,43 @@ function renderRanking() {
 }
 
 function showDetail(res) {
+    const visitDate = res.date || res.fecha || '';
+    const rating = res.rating || '0';
+
     restaurantContent.innerHTML = `
         <div class="detail-header">
-            <h1 class="detail-title" style="font-family: var(--font-title); font-weight: 800; font-size: 2.5rem;">${res.name}</h1>
-            <p class="subtitle">${res.location || 'Global Selection'}</p>
-            <p style="margin-top: 1rem; color: var(--text-muted);">${res.description || 'Una joya gastronómica seleccionada para el ranking mensual.'}</p>
-        </div>
-        <div class="timeline" style="margin-top: 3rem;">
-            <h2 style="font-family: var(--font-title); margin-bottom: 1.5rem;">Visitas</h2>
-            ${MOCK_VISITS.map((v, i) => `
-                <div class="visit-card" data-index="${i}">
-                    <div class="visit-header">
-                        <div class="visit-date">${v.date}</div>
-                        <div class="sub-tabs">
-                            <button class="sub-tab-btn active" data-subtab="fotos" data-visit="${i}">Fotos y Detalle</button>
-                            <button class="sub-tab-btn" data-subtab="puntajes" data-visit="${i}">Puntajes</button>
-                        </div>
+            <div class="detail-header-content">
+                <div>
+                    <div class="detail-title-row">
+                        <h1 class="detail-title" style="font-family: var(--font-title); font-weight: 800; font-size: 2.5rem;">${res.name}</h1>
+                        ${visitDate ? `<span class="detail-date">${visitDate}</span>` : ''}
                     </div>
-
-                    <div id="fotos-${i}" class="sub-tab-content">
-                        <p style="font-style: italic; margin-bottom: 1rem; margin-top: 1rem;">"${v.comment}"</p>
-                        <div class="gallery" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                            ${v.images.map(img => `<img src="${img}" class="gallery-img" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px;">`).join('')}
-                        </div>
-                    </div>
-
-                    <div id="puntajes-${i}" class="sub-tab-content hidden">
-                        <div class="puntajes-placeholder" style="margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.02); border-radius: 12px; border: 1px dashed rgba(0,0,0,0.1);">
-                            <p style="text-align: center; color: var(--text-muted); font-size: 0.9rem;">Próximamente: Detalle de votación de los críticos y desglose de puntajes por categoría.</p>
-                        </div>
-                    </div>
+                    <p class="subtitle">${res.location || 'Global Selection'}</p>
                 </div>
-            `).join('')}
+                <div class="detail-score-box">
+                    <div class="score-label">Puntaje</div>
+                    <div class="score-value">${rating}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="detail-tabs-container" style="margin-top: 3rem;">
+            <div class="sub-tabs">
+                <button class="sub-tab-btn active" data-subtab="fotos">Fotos</button>
+                <button class="sub-tab-btn" data-subtab="puntajes">Puntajes</button>
+            </div>
+            
+            <div id="fotos-content" class="sub-tab-content">
+                <div class="gallery" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 1.5rem;">
+                    ${MOCK_VISITS[0]?.images.map(img => `<img src="${img}" class="gallery-img" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px;">`).join('') || ''}
+                </div>
+            </div>
+            
+            <div id="puntajes-content" class="sub-tab-content hidden">
+                <div class="puntajes-placeholder" style="margin-top: 1.5rem; padding: 1rem; background: rgba(0,0,0,0.02); border-radius: 12px; border: 1px dashed rgba(0,0,0,0.1);">
+                    <p style="text-align: center; color: var(--text-muted); font-size: 0.9rem;">Próximamente: Detalle de votación de los críticos y desglose de puntajes por categoría.</p>
+                </div>
+            </div>
         </div>
     `;
 
@@ -208,17 +223,15 @@ function showDetail(res) {
     document.querySelectorAll('.sub-tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const visitIdx = btn.getAttribute('data-visit');
             const target = btn.getAttribute('data-subtab');
-            const card = btn.closest('.visit-card');
 
-            // Update buttons in this card only
-            card.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
+            // Update buttons
+            document.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            // Update content in this card only
-            card.querySelectorAll('.sub-tab-content').forEach(content => content.classList.add('hidden'));
-            card.querySelector(`#${target}-${visitIdx}`).classList.remove('hidden');
+            // Update content
+            document.querySelectorAll('.sub-tab-content').forEach(content => content.classList.add('hidden'));
+            document.getElementById(`${target}-content`).classList.remove('hidden');
         });
     });
 
