@@ -207,7 +207,25 @@ function showDetail(res) {
             
             <div id="fotos-content" class="sub-tab-content">
                 <div class="gallery" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 1.5rem;">
-                    ${MOCK_VISITS[0]?.images.map(img => `<img src="${img}" class="gallery-img" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px;">`).join('') || ''}
+                    ${(() => {
+            // Intentar obtener fotos del Google Sheet
+            const photosString = res.fotos || res.images || res.photos || '';
+            let photos = [];
+
+            if (photosString && photosString.trim()) {
+                // Separar por punto y coma y limpiar espacios
+                photos = photosString.split(';')
+                    .map(url => url.trim())
+                    .filter(url => url.length > 0);
+            }
+
+            // Si no hay fotos del sheet, usar las de MOCK_VISITS
+            if (photos.length === 0) {
+                photos = MOCK_VISITS[0]?.images || [];
+            }
+
+            return photos.map(img => `<img src="${img}" class="gallery-img" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px;">`).join('');
+        })()}
                 </div>
             </div>
             
