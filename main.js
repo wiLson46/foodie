@@ -206,8 +206,7 @@ function showDetail(res) {
             </div>
             
             <div id="fotos-content" class="sub-tab-content">
-                <div class="gallery" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 1.5rem;">
-                    ${(() => {
+                ${(() => {
             // Intentar obtener fotos del Google Sheet
             const photosString = res.fotos || res.images || res.photos || '';
             let photos = [];
@@ -219,14 +218,23 @@ function showDetail(res) {
                     .filter(url => url.length > 0);
             }
 
-            // Si no hay fotos del sheet, usar las de MOCK_VISITS
-            if (photos.length === 0) {
-                photos = MOCK_VISITS[0]?.images || [];
+            // Si hay fotos, mostrar la galería
+            if (photos.length > 0) {
+                return `
+                            <div class="gallery" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 1.5rem;">
+                                ${photos.map(img => `<img src="${img}" class="gallery-img" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px;">`).join('')}
+                            </div>
+                        `;
+            } else {
+                // Si no hay fotos, mostrar mensaje
+                return `
+                            <div style="margin-top: 1.5rem; padding: 2rem; text-align: center; color: var(--text-muted);">
+                                <i data-lucide="image-off" style="width: 48px; height: 48px; margin: 0 auto 1rem; opacity: 0.3;"></i>
+                                <p style="font-size: 1rem;">No hay fotos para este evento</p>
+                            </div>
+                        `;
             }
-
-            return photos.map(img => `<img src="${img}" class="gallery-img" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px;">`).join('');
         })()}
-                </div>
             </div>
             
             <div id="puntajes-content" class="sub-tab-content hidden">
