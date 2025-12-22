@@ -1,15 +1,16 @@
 
 // --- CONFIG & DATA ---
-// Google Sheets - Diferentes pestañas por crítico
 const GOOGLE_SHEETS = {
+    // La hoja principal contiene el ranking general y las fotos (Columna G)
+    main: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv',
     wil: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=667637220',
     fer: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=445878910',
     colo: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1592300088',
     andy: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1438813672'
 };
 
-// URL principal (pestaña wil por defecto)
-const GOOGLE_SHEET_CSV_URL = GOOGLE_SHEETS.wil;
+// URL principal
+const GOOGLE_SHEET_CSV_URL = GOOGLE_SHEETS.main;
 
 const MOCK_DATA = [
     { rank: 1, name: "Pujol", rating: "9.8", description: "Cocina mexicana de autor en las manos de Enrique Olvera.", location: "CDMX, México" },
@@ -127,9 +128,10 @@ function fetchSheet(url) {
 }
 
 function fetchCriticsData() {
-    // We assume 'wil' is the main data source for the ranking list
-    // But we fetch all of them
+    // 1. Fetch MAIN data (Ranking + Photos)
+    // 2. Fetch Critics data (Scores)
     const promises = [
+        fetchSheet(GOOGLE_SHEETS.main).then(data => { return data; }), // Index 0: Main Data
         fetchSheet(GOOGLE_SHEETS.wil).then(data => { criticsData.wil = data; return data; }),
         fetchSheet(GOOGLE_SHEETS.fer).then(data => { criticsData.fer = data; return data; }),
         fetchSheet(GOOGLE_SHEETS.colo).then(data => { criticsData.colo = data; return data; }),
@@ -137,7 +139,7 @@ function fetchCriticsData() {
     ];
 
     Promise.all(promises).then(results => {
-        // Results[0] is 'wil', which we use for the main list
+        // Results[0] is MAIN data (ranking + photos)
         const mainData = results[0];
 
         if (mainData && mainData.length > 0) {
@@ -206,6 +208,10 @@ function renderRanking() {
 }
 
 function showDetail(res) {
+    console.log("--- DEBUG DETALLE ---");
+    console.log("Datos del restaurante:", res);
+    console.log("Fotos raw:", res.fotos, res.images, res.photos);
+
     const visitDate = res.date || res.fecha || '';
     const rating = res.rating || '0';
 
@@ -234,10 +240,31 @@ function showDetail(res) {
             
             <div id="fotos-content" class="sub-tab-content">
                 ${(() => {
-            // Intentar obtener fotos del Google Sheet
-            const photosString = res.fotos || res.images || res.photos || '';
-            let photos = [];
+            // 1. Intentar obtener fotos del objeto principal (res)
+            let photosString = res.fotos || res.images || res.photos || '';
 
+            // 2. Si no hay fotos en res, buscar en todos los críticos
+            if (!photosString && typeof criticsData !== 'undefined') {
+                const criticNames = ['wil', 'fer', 'colo', 'andy'];
+                for (const critic of criticNames) {
+                    const data = criticsData[critic] || [];
+                    const criticRes = data.find(r =>
+                        (r.nombre && r.nombre.toLowerCase().trim() === res.name.toLowerCase().trim()) ||
+                        (r.name && r.name.toLowerCase().trim() === res.name.toLowerCase().trim())
+                    );
+
+                    if (criticRes) {
+                        const criticPhotos = criticRes.fotos || criticRes.images || criticRes.photos;
+                        if (criticPhotos && criticPhotos.trim()) {
+                            photosString = criticPhotos;
+                            console.log(`Fotos encontradas en pestaña de ${critic}`);
+                            break; // Encontramos fotos, detenemos la búsqueda
+                        }
+                    }
+                }
+            }
+
+            let photos = [];
             if (photosString && photosString.trim()) {
                 // Separar por punto y coma y limpiar espacios
                 photos = photosString.split(';')
