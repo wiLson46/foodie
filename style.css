@@ -1026,3 +1026,87 @@ input:checked+.slider:before {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3),
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
+
+/* Explicit Data List */
+.detail-info-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    /* Desktop: 2 Col */
+    gap: 0.1rem;
+    margin: 20px auto;
+    max-width: 800px;
+}
+
+.info-item {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    border-radius: 12px;
+    transition: all 0.3s ease;
+    text-decoration: none !important;
+    /* Remove link underline */
+    color: inherit;
+}
+
+/* Icons */
+.info-item i {
+    width: 20px;
+    /* Reduced Size */
+    height: 20px;
+    flex-shrink: 0;
+}
+
+/* Active State (Data present) */
+.info-item.active {
+    color: var(--text-main);
+    /* Black */
+}
+
+.info-item.active.link:hover {
+    background: rgba(0, 0, 0, 0.03);
+    transform: translateY(-1px);
+}
+
+/* Inactive State (Data missing) */
+.info-item.inactive {
+    color: #e0e0e0 !important;
+    /* Light Gray */
+    cursor: default;
+    pointer-events: none;
+}
+
+/* Dark Mode Overrides */
+.dark-mode .info-item.active {
+    color: var(--text-main);
+}
+
+.dark-mode .info-item.inactive {
+    color: #444 !important;
+}
+
+/* Mobile Override */
+@media (max-width: 768px) {
+    .detail-info-list {
+        grid-template-columns: 1fr;
+        /* Mobile: 1 Col */
+        gap: 0.1rem;
+        padding: 0 1rem;
+        margin-top: 1rem;
+    }
+
+    .info-item {
+        font-size: 0.9rem;
+        /* Reduced Font on Mobile */
+        padding: 0.4rem 0.5rem;
+    }
+
+    .info-item i {
+        width: 18px;
+        /* Even smaller on Mobile */
+        height: 18px;
+    }
+}

@@ -222,11 +222,16 @@ function showDetail(res) {
     const rating = res.rating || '0';
     const rank = parseInt(res.rank || 0);
 
-    // Nueva logica de ubicacion
+    // Nueva logica de ubicacion (Iconos)
     const address = res.address || res.direccion || '';
     const phone = res.phone || res.telefono || '';
     const instagram = res.instagram || '';
-    const mapName = encodeURIComponent(res.name);
+
+    // Links logic
+    const mapLink = res.link_mapa || res.google_maps || '';
+    const addressLink = res.link_direccion || (address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : '');
+    const phoneLink = phone ? `tel:${phone.replace(/\D/g, '')}` : '';
+    const instagramLink = instagram ? `https://instagram.com/${instagram.replace('@', '').replace('https://instagram.com/', '')}` : '';
 
     let medalClass = '';
     if (rank === 1) medalClass = 'top-1';
@@ -264,25 +269,42 @@ function showDetail(res) {
             </div>
         </div>
         
-        <div class="detail-extras">
-             ${(address || phone || instagram) ? `
-                <div class="contact-card">
-                    ${address ? `<div class="contact-item"><i data-lucide="map-pin"></i> <span>${address}</span></div>` : ''}
-                    ${phone ? `<div class="contact-item"><i data-lucide="phone"></i> <span>${phone}</span></div>` : ''}
-                    ${instagram ? `<div class="contact-item"><i data-lucide="instagram"></i> <a href="https://instagram.com/${instagram.replace('@', '')}" target="_blank">${instagram}</a></div>` : ''}
-                </div>` : ''}
-            
-            <div class="map-container">
-                <iframe
-                    width="100%"
-                    height="200"
-                    frameborder="0"
-                    scrolling="no"
-                    marginheight="0"
-                    marginwidth="0"
-                    src="https://maps.google.com/maps?q=${mapName}&t=&z=15&ie=UTF8&iwloc=&output=embed">
-                </iframe>
+        <div class="detail-info-list">
+            <!-- 1) Dirección (Pin de Mapa + Texto Raw) -->
+            <div class="info-item ${address ? 'active' : 'inactive'}">
+                <i data-lucide="map-pin"></i>
+                <span>${address || 'Dirección no disponible'}</span>
             </div>
+
+            <!-- 2) Teléfono (Icono + Texto Raw) -->
+            <div class="info-item ${phone ? 'active' : 'inactive'}">
+                <i data-lucide="phone"></i>
+                <span>${phone || 'Teléfono no disponible'}</span>
+            </div>
+
+            <!-- 3) Instagram (Icono + Link "Ver el IG del local") -->
+            ${instagramLink ?
+            `<a href="${instagramLink}" target="_blank" class="info-item active link">
+                    <i data-lucide="instagram"></i>
+                    <span>Ver el IG del local</span>
+                </a>` :
+            `<div class="info-item inactive">
+                    <i data-lucide="instagram"></i>
+                    <span>Ver el IG del local</span>
+                </div>`
+        }
+
+            <!-- 4) Mapa (Icono + Link "Ir al local") -->
+            ${mapLink ?
+            `<a href="${mapLink}" target="_blank" class="info-item active link">
+                    <i data-lucide="map"></i>
+                    <span>Ir al local</span>
+                </a>` :
+            `<div class="info-item inactive">
+                    <i data-lucide="map"></i>
+                    <span>Ir al local</span>
+                </div>`
+        }
         </div>
         
         <div class="detail-tabs-container" style="margin-top: 3rem;">
