@@ -664,6 +664,87 @@ input:checked+.slider:before {
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
+/* Mobile Optimizations for Ranking Cards */
+@media (max-width: 768px) {
+    .ranking-item {
+        padding: 0.8rem 1rem;
+        /* Even more compact */
+        display: grid;
+        /* Col 1: Rank (fixed min width), Col 2: Date, Col 3: Space/Score, Col 4: Arrow */
+        grid-template-columns: min-content auto 1fr auto;
+        grid-template-areas:
+            ". title title title"
+            "rank date score arrow"
+            ". loc loc loc";
+        align-items: center;
+        gap: 0.2rem 0.6rem;
+    }
+
+    /* Flatten flex containers to use Grid */
+    .ranking-item .restaurant-info,
+    .ranking-item .restaurant-name-row {
+        display: contents;
+    }
+
+    .ranking-item .restaurant-name {
+        grid-area: title;
+        width: 100%;
+        line-height: 1.2;
+        margin-bottom: 0.2rem;
+        font-size: 1.25rem;
+    }
+
+    .ranking-item .restaurant-date {
+        grid-area: date;
+        justify-self: start;
+        margin: 0;
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+    }
+
+    .ranking-item .score-box {
+        grid-area: score;
+        justify-self: end;
+        margin-left: auto;
+        padding: 0.2rem 0.6rem;
+    }
+
+    .ranking-item .score-box .score-label {
+        font-size: 0.55rem;
+    }
+
+    .ranking-item .score-box .score-value {
+        font-size: 1rem;
+    }
+
+    .ranking-item .restaurant-location {
+        grid-area: loc;
+        /* grid-column: 1 / -1; removed to respect column 1 empty space */
+        font-size: 0.8rem;
+        margin-top: 0.2rem;
+        color: var(--text-muted);
+        opacity: 0.8;
+    }
+
+    .ranking-item .rank-number {
+        grid-area: rank;
+        margin-right: 0;
+        font-size: 1.4rem;
+        align-self: center;
+        padding-top: 0;
+        line-height: 1;
+        /* Color property removed to respect .top-1/2/3 specific colors */
+    }
+
+    .ranking-item svg {
+        display: block;
+        grid-area: arrow;
+        width: 18px;
+        height: 18px;
+        opacity: 0.5;
+    }
+}
+
 .dark-mode .sub-tab-btn {
     color: var(--text-main);
 }
