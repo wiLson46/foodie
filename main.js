@@ -222,6 +222,12 @@ function showDetail(res) {
     const rating = res.rating || '0';
     const rank = parseInt(res.rank || 0);
 
+    // Nueva logica de ubicacion
+    const address = res.address || res.direccion || '';
+    const phone = res.phone || res.telefono || '';
+    const instagram = res.instagram || '';
+    const mapName = encodeURIComponent(res.name);
+
     let medalClass = '';
     if (rank === 1) medalClass = 'top-1';
     else if (rank === 2) medalClass = 'top-2';
@@ -255,6 +261,27 @@ function showDetail(res) {
                 <div class="detail-description">
                     <p>${res.description || ''}</p>
                 </div>
+            </div>
+        </div>
+        
+        <div class="detail-extras">
+             ${(address || phone || instagram) ? `
+                <div class="contact-card">
+                    ${address ? `<div class="contact-item"><i data-lucide="map-pin"></i> <span>${address}</span></div>` : ''}
+                    ${phone ? `<div class="contact-item"><i data-lucide="phone"></i> <span>${phone}</span></div>` : ''}
+                    ${instagram ? `<div class="contact-item"><i data-lucide="instagram"></i> <a href="https://instagram.com/${instagram.replace('@', '')}" target="_blank">${instagram}</a></div>` : ''}
+                </div>` : ''}
+            
+            <div class="map-container">
+                <iframe
+                    width="100%"
+                    height="200"
+                    frameborder="0"
+                    scrolling="no"
+                    marginheight="0"
+                    marginwidth="0"
+                    src="https://maps.google.com/maps?q=${mapName}&t=&z=15&ie=UTF8&iwloc=&output=embed">
+                </iframe>
             </div>
         </div>
         
@@ -474,6 +501,9 @@ function showDetail(res) {
             </div>
         </div>
     `;
+
+    // Initialize icons for new content
+    lucide.createIcons();
 
     // Sub-tab logic
     document.querySelectorAll('.sub-tab-btn').forEach(btn => {
