@@ -308,14 +308,43 @@ input:checked+.slider:before {
     margin: 0;
 }
 
-.restaurant-date {
-    font-family: var(--font-body);
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text-muted);
-    padding: 0.3rem 0.7rem;
+/* Ranking Date Box (Desktop) */
+.ranking-date-box {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
     background: rgba(0, 0, 0, 0.05);
-    border-radius: 6px;
+    border-radius: 10px;
+    padding: 0.5rem 1rem;
+    /* Standardized Padding */
+    border: 1px solid transparent;
+    min-width: 80px;
+    /* Optional: Match min-width if needed, or let content flow */
+    height: 100%;
+    /* Ensure equal height if flex container allows */
+}
+
+.ranking-date-box .date-label {
+    font-family: var(--font-body);
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    margin-bottom: 0;
+    line-height: 1.2;
+}
+
+.ranking-date-box .date-value {
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    /* User Request: .75rem DM Sans */
+    font-weight: 800;
+    color: var(--text-main);
+    line-height: 1;
+    margin-top: 0.2rem;
+    /* Standardized Gap */
 }
 
 .restaurant-location {
@@ -334,7 +363,8 @@ input:checked+.slider:before {
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.8);
     border-radius: 10px;
-    padding: 0.6rem 1rem;
+    padding: 0.5rem 1rem;
+    /* Standardized Padding matches Date Box */
     margin-right: 1rem;
     min-width: 80px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06),
@@ -357,6 +387,7 @@ input:checked+.slider:before {
     color: var(--text-main);
     line-height: 1;
     margin-top: 0.2rem;
+    /* Standardized Gap */
 }
 
 .dark-mode .score-box {
@@ -364,7 +395,7 @@ input:checked+.slider:before {
     border-color: rgba(255, 255, 255, 0.15);
 }
 
-.dark-mode .restaurant-date {
+.dark-mode .ranking-date-box {
     background: rgba(255, 255, 255, 0.08);
 }
 
@@ -426,10 +457,13 @@ input:checked+.slider:before {
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.8);
     border-radius: 12px;
-    padding: 0.8rem 1.5rem;
+    padding: 0.5rem 1rem;
+    /* Standardized Padding matches detail-date-box */
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08),
         inset 0 1px 0 rgba(255, 255, 255, 0.9);
     flex-shrink: 0;
+    min-width: 80px;
+    /* Standardize Width */
 }
 
 .dark-mode .detail-score-box {
@@ -664,6 +698,187 @@ input:checked+.slider:before {
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
+/* Detail Header Grid Layout */
+.detail-header-grid {
+    display: grid;
+    /* Desktop: Rank in Row 1 only. Title spans Row 1. Score in Row 2 Col 4. */
+    /* Row 2: Location (Left) | Date (Middle) | Score (Right) */
+    grid-template-columns: min-content 1fr auto auto;
+    grid-template-areas:
+        "rank title title title"
+        ".    loc   date  score"
+        "desc desc  desc  desc";
+    column-gap: 1.5rem;
+    row-gap: 0.5rem;
+    align-items: center;
+}
+
+.detail-rank {
+    grid-area: rank;
+    font-family: var(--font-title);
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--text-muted);
+    line-height: 1;
+    /* Remove background/borders if inherited from top-x classes */
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    min-width: 0;
+}
+
+/* Rank Colors (Text Only) */
+.detail-rank.top-1 {
+    color: #ff9100;
+}
+
+.detail-rank.top-2 {
+    color: #888;
+}
+
+.detail-rank.top-3 {
+    color: #cd7f32;
+}
+
+.detail-title {
+    grid-area: title;
+    margin: 0;
+}
+
+/* Date Box - Matches Score Box Typography with Gray Background */
+.detail-date-box {
+    grid-area: date;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 12px;
+    padding: 0.5rem 1rem;
+    width: fit-content;
+    border: 1px solid transparent;
+    min-width: 80px;
+    /* Standardize Width */
+}
+
+.detail-date-box .date-label {
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    margin-bottom: 0;
+    /* Clear bottom margin */
+}
+
+.detail-date-box .date-value {
+    font-family: var(--font-body);
+    /* User Request: DM Sans */
+    font-size: 0.75rem;
+    /* User Request: .75rem Desktop */
+    font-weight: 800;
+    color: var(--text-main);
+    line-height: 1;
+    margin-top: 0.2rem;
+    /* Standardized Gap */
+}
+
+/* Dark Mode support for Date Box */
+.dark-mode .detail-date-box {
+    background: rgba(30, 30, 30, 0.6);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+}
+
+.detail-location {
+    grid-area: loc;
+    margin: 0;
+    font-size: 0.85rem;
+    /* Achicar un poquito */
+    color: #444;
+    /* Gris oscuro */
+    font-weight: 500;
+}
+
+.dark-mode .detail-location {
+    color: #ccc;
+}
+
+.detail-score-box {
+    grid-area: score;
+    justify-self: end;
+}
+
+.detail-description {
+    grid-area: desc;
+    margin-top: 1rem;
+    font-size: 1.1rem;
+    line-height: 1.6;
+    opacity: 0.9;
+}
+
+/* Mobile Override */
+@media (max-width: 768px) {
+    .detail-header-grid {
+        /* Mobile: Rank Title (R1), Date Score (R2), Loc (R3), Desc (R4) */
+        /* Use 3 cols to align Title with Date/Loc */
+        grid-template-columns: min-content 1fr auto;
+        grid-template-areas:
+            "rank title title"
+            ".    date  score"
+            ".    loc   loc"
+            "desc desc  desc";
+        row-gap: 0.8rem;
+        column-gap: 0.8rem;
+    }
+
+    .detail-title {
+        font-size: 1.4rem !important;
+        align-self: center;
+    }
+
+    .detail-rank {
+        font-size: 2rem;
+        align-self: center;
+        justify-self: center;
+    }
+
+    .detail-date-box {
+        grid-area: date;
+        justify-self: start;
+        padding: 0.3rem 0.8rem;
+        margin-left: -0.5rem;
+    }
+
+    /* Typography Scaling for Mobile */
+    .detail-header-grid .score-label,
+    .detail-header-grid .date-label {
+        font-size: 0.55rem;
+    }
+
+    .detail-header-grid .score-value {
+        font-size: 1.1rem;
+    }
+
+    .detail-header-grid .date-value {
+        font-size: 0.65rem;
+        /* User Request: .65rem DM Sans Mobile */
+    }
+
+    .detail-score-box {
+        grid-area: score;
+        justify-self: end;
+        padding: 0.3rem 0.8rem;
+    }
+
+    .detail-description {
+        margin-top: 0.5rem;
+        font-size: 1rem;
+    }
+}
+
+
 /* Mobile Optimizations for Ranking Cards */
 @media (max-width: 768px) {
     .ranking-item {
@@ -694,12 +909,22 @@ input:checked+.slider:before {
         font-size: 1.25rem;
     }
 
-    .ranking-item .restaurant-date {
+    .ranking-item .ranking-date-box {
         grid-area: date;
         justify-self: start;
         margin: 0;
-        font-size: 0.75rem;
-        padding: 0.2rem 0.5rem;
+        padding: 0.2rem 0.6rem;
+        /* Match Score Box */
+    }
+
+    .ranking-item .ranking-date-box .date-label {
+        font-size: 0.55rem;
+        /* Match Score Label */
+    }
+
+    .ranking-item .ranking-date-box .date-value {
+        font-size: 0.65rem;
+        /* User Request: .65rem DM Sans Mobile */
     }
 
     .ranking-item .score-box {

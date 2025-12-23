@@ -152,10 +152,12 @@ function fetchCriticsData() {
                 // Check if we have a 'name' or 'nombre' column
                 const hasName = Object.keys(firstRow).some(k => k === 'name' || k === 'nombre');
                 if (hasName) {
-                    restaurants = mainData.map(r => ({
+                    restaurants = mainData.map((r, index) => ({
                         ...r,
                         name: r.name || r.nombre, // Normalize name property
-                        rating: r.rating || r.promedio || r.score || '0'
+                        rating: r.rating || r.promedio || r.score || '0',
+                        rank: index + 1,
+                        description: r.description || r.descripcion || ''
                     }));
                 } else {
                     restaurants = MOCK_DATA;
@@ -190,7 +192,11 @@ function renderRanking() {
             <div class="restaurant-info">
                 <div class="restaurant-name-row">
                     <h3 class="restaurant-name">${res.name}</h3>
-                    ${visitDate ? `<span class="restaurant-date">${visitDate}</span>` : ''}
+                    ${visitDate ? `
+                    <div class="ranking-date-box">
+                        <div class="date-label">VISITADO EL</div>
+                        <div class="date-value">${visitDate}</div>
+                    </div>` : ''}
                 </div>
                 <p class="restaurant-location">${res.location || 'Luxury'}</p>
             </div>
@@ -214,20 +220,40 @@ function showDetail(res) {
 
     const visitDate = res.date || res.fecha || '';
     const rating = res.rating || '0';
+    const rank = parseInt(res.rank || 0);
+
+    let medalClass = '';
+    if (rank === 1) medalClass = 'top-1';
+    else if (rank === 2) medalClass = 'top-2';
+    else if (rank === 3) medalClass = 'top-3';
 
     restaurantContent.innerHTML = `
         <div class="detail-header">
-            <div class="detail-header-content">
-                <div>
-                    <div class="detail-title-row">
-                        <h1 class="detail-title" style="font-family: var(--font-title); font-weight: 800; font-size: 2.5rem;">${res.name}</h1>
-                        ${visitDate ? `<span class="detail-date">${visitDate}</span>` : ''}
-                    </div>
-                    <p class="subtitle">${res.location || 'Global Selection'}</p>
+            <div class="detail-header-grid">
+                <!-- Rank -->
+                <div class="detail-rank ${medalClass}">${rank > 0 ? rank : '-'}</div>
+                
+                <!-- Title -->
+                <h1 class="detail-title">${res.name}</h1>
+                
+                <!-- Date -->
+                <div class="detail-date-box">
+                    <div class="date-label">VISITADO EL</div>
+                    <div class="date-value">${visitDate}</div>
                 </div>
+
+                <!-- Score -->
                 <div class="detail-score-box">
                     <div class="score-label">Puntaje</div>
                     <div class="score-value">${rating}</div>
+                </div>
+
+                <!-- Location -->
+                <p class="detail-location">${res.location || 'Global Selection'}</p>
+                
+                <!-- Description -->
+                <div class="detail-description">
+                    <p>${res.description || ''}</p>
                 </div>
             </div>
         </div>
