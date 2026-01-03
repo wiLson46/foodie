@@ -116,12 +116,18 @@ function fetchCriticsData() {
         filteredRestaurants = [...restaurants];
         populateLocationFilter();
         renderRanking();
+
+        // Handle hash navigation after data is loaded
+        handleHashChange();
     }).catch(err => {
         console.error("Error loading data:", err);
         restaurants = MOCK_DATA;
         filteredRestaurants = [...restaurants];
         populateLocationFilter();
         renderRanking();
+
+        // Handle hash navigation even with mock data
+        handleHashChange();
     });
 }
 
@@ -335,11 +341,35 @@ function generateScoresTableHTML(restaurantName) {
 }
 
 /**
+ * Converts restaurant name to URL-safe slug
+ */
+function getRestaurantSlug(name) {
+    return name.toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Finds restaurant by slug
+ */
+function findRestaurantBySlug(slug) {
+    return restaurants.find(r => getRestaurantSlug(r.name) === slug);
+}
+
+/**
  * Shows restaurant detail view
  */
-function showDetail(res) {
+function showDetail(res, updateHash = true) {
     console.log("--- DEBUG DETALLE ---");
     console.log("Datos del restaurante:", res);
+
+    // Update URL hash if needed
+    if (updateHash) {
+        const slug = getRestaurantSlug(res.name);
+        window.location.hash = `restaurant/${slug}`;
+    }
 
     const visitDate = res.date || res.fecha || '';
     const rating = res.rating || '0';
@@ -580,7 +610,7 @@ function setupSubTabs() {
 /**
  * Toggles back to home view
  */
-function toggleHome() {
+function toggleHome(updateHash = true) {
     const tl = gsap.timeline();
     tl.to('.detail-container', {
         opacity: 0, duration: 0.3, onComplete: () => {
@@ -589,6 +619,39 @@ function toggleHome() {
         }
     });
     tl.to(homeView, { opacity: 1, duration: 0.4 });
+
+    // Clear hash when going back to home
+    if (updateHash && window.location.hash) {
+        history.pushState('', document.title, window.location.pathname + window.location.search);
+    }
+}
+
+// --- HASH NAVIGATION ---
+
+/**
+ * Handles hash changes for navigation
+ */
+function handleHashChange() {
+    const hash = window.location.hash.slice(1); // Remove #
+
+    if (hash.startsWith('restaurant/')) {
+        const slug = hash.replace('restaurant/', '');
+        const restaurant = findRestaurantBySlug(slug);
+
+        if (restaurant) {
+            // Show detail without updating hash (to avoid loop)
+            showDetail(restaurant, false);
+        } else {
+            // Restaurant not found, go back to home
+            console.warn(`Restaurant not found for slug: ${slug}`);
+            toggleHome(false);
+        }
+    } else if (hash === '' || hash === '/') {
+        // Empty hash or root, show home
+        if (!detailView.classList.contains('hidden')) {
+            toggleHome(false);
+        }
+    }
 }
 
 // --- TAB MANAGEMENT ---
@@ -727,7 +790,11 @@ function initApp() {
     setupLightbox();
 
     // Back button
-    backBtn.addEventListener('click', toggleHome);
+    backBtn.addEventListener('click', () => toggleHome(true));
+
+    // Hash navigation listeners
+    window.addEventListener('hashchange', handleHashChange);
+    // Note: Don't call handleHashChange on load event, it's called after data loads
 
     // Show location filter on load if ranking tab is active
     setTimeout(() => {
