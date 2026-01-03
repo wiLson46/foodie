@@ -351,7 +351,7 @@ function showDetail(res) {
             if (photos.length > 0) {
                 return `
                             <div class="gallery" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 1.5rem;">
-                                ${photos.map(img => `<img src="${img}" class="gallery-img" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px;">`).join('')}
+                                ${photos.map(img => `<img src="${img}" class="gallery-img" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer; transition: opacity 0.2s;" onclick="openLightbox('${img}')">`).join('')}
                             </div>
                         `;
             } else {
@@ -564,3 +564,46 @@ function toggleHome() {
 
     tl.to(homeView, { opacity: 1, duration: 0.4 });
 }
+
+// Lightbox Logic
+window.openLightbox = function (src) {
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightbox-img');
+    if (lightbox && lightboxImg) {
+        lightboxImg.src = src;
+        lightbox.classList.add('visible');
+    }
+}
+
+window.closeLightbox = function () {
+    const lightbox = document.getElementById('lightbox');
+    if (lightbox) {
+        lightbox.classList.remove('visible');
+        setTimeout(() => {
+            const lightboxImg = document.getElementById('lightbox-img');
+            if (lightboxImg) lightboxImg.src = '';
+        }, 300);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const lightbox = document.getElementById('lightbox');
+    const closeBtn = document.getElementById('lightbox-close');
+
+    if (lightbox) {
+        lightbox.addEventListener('click', (e) => {
+            if (e.target === lightbox) {
+                closeLightbox();
+            }
+        });
+    }
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeLightbox);
+    }
+
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeLightbox();
+    });
+});
