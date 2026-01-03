@@ -350,7 +350,7 @@ function showDetail(res) {
     const address = res.address || res.direccion || '';
     const phone = res.phone || res.telefono || '';
     const instagram = res.instagram || '';
-    const mapLink = res.link_mapa || res.google_maps || '';
+    const mapLink = res['link mapa'] || res.link_mapa || res.google_maps || '';
 
     const instagramLink = instagram ? `https://instagram.com/${instagram.replace('@', '').replace('https://instagram.com/', '')}` : '';
 
