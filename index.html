@@ -5,39 +5,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gourmet Elite | Ranking de Restaurantes</title>
+    <meta name="description" content="Ranking profesional de restaurantes visitados por críticos gastronómicos">
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap"
         rel="stylesheet">
+
     <!-- CSS -->
     <link rel="stylesheet" href="style.css">
+
     <!-- Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" defer></script>
+    <script src="https://unpkg.com/lucide@latest" defer></script>
 </head>
 
 <body class="light-mode">
     <div id="app">
         <!-- Settings -->
-        <div class="settings-nav">
+        <nav class="settings-nav" aria-label="Configuración">
             <div class="dropdown">
-                <button id="settings-btn" class="icon-btn">
-                    <i data-lucide="settings"></i>
+                <button id="settings-btn" class="icon-btn" aria-label="Abrir menú de configuración"
+                    aria-expanded="false">
+                    <i data-lucide="settings" aria-hidden="true"></i>
                 </button>
-                <div id="settings-menu" class="dropdown-content hidden">
-                    <div class="menu-item">
+                <div id="settings-menu" class="dropdown-content hidden" role="menu">
+                    <div class="menu-item" role="menuitem">
                         <span>Modo Oscuro</span>
                         <label class="switch">
-                            <input type="checkbox" id="dark-mode-toggle">
+                            <input type="checkbox" id="dark-mode-toggle" aria-label="Activar modo oscuro">
                             <span class="slider round"></span>
                         </label>
                     </div>
                 </div>
             </div>
-        </div>
+        </nav>
 
         <!-- Header -->
         <header class="header">
@@ -46,47 +51,50 @@
         </header>
 
         <!-- HOME VIEW -->
-        <div id="home" class="view">
-            <div class="tabs-container">
-                <button class="tab-btn active" data-tab="ranking">Ranking</button>
-                <button class="tab-btn" data-tab="map">Mapa</button>
-                <button class="tab-btn" data-tab="about">Quiénes Somos</button>
-            </div>
+        <main id="home" class="view">
+            <nav class="tabs-container" role="tablist" aria-label="Navegación principal">
+                <button class="tab-btn active" data-tab="ranking" role="tab" aria-selected="true"
+                    aria-controls="ranking-view">Ranking</button>
+                <button class="tab-btn" data-tab="map" role="tab" aria-selected="false"
+                    aria-controls="map-view">Mapa</button>
+                <button class="tab-btn" data-tab="about" role="tab" aria-selected="false"
+                    aria-controls="about-view">Quiénes Somos</button>
+            </nav>
 
-            <div id="ranking-view" class="tab-content">
+            <section id="ranking-view" class="tab-content" role="tabpanel" aria-labelledby="ranking-tab">
                 <div id="ranking-list" class="ranking-list">
                     <!-- Data will be injected here -->
                     <div class="loader">Cargando la selección...</div>
                 </div>
-            </div>
+            </section>
 
-            <div id="map-view" class="tab-content hidden">
+            <section id="map-view" class="tab-content hidden" role="tabpanel" aria-labelledby="map-tab">
                 <div class="map-placeholder">
                     <iframe
                         src="https://www.google.com/maps/d/embed?mid=1rViUskbYtl1mWekFkuBO6AQdzEsOI20&ehbc=2E312F&noprof=1"
                         width="100%" height="450" style="border:0; border-radius: 16px;" loading="lazy" allowfullscreen
-                        referrerpolicy="no-referrer-when-downgrade"></iframe>
+                        referrerpolicy="no-referrer-when-downgrade" title="Mapa de ubicación de restaurantes"></iframe>
                 </div>
-            </div>
+            </section>
 
-            <div id="about-view" class="tab-content hidden">
-                <div class="about-card">
+            <section id="about-view" class="tab-content hidden" role="tabpanel" aria-labelledby="about-tab">
+                <article class="about-card">
                     <h2 style="font-family: var(--font-title); margin-bottom: 1rem;">Nuestra Historia</h2>
                     <p>Somos un grupo de gordos.</p>
                     <p style="margin-top: 1rem;">Nuestra misión es comer mas sin que se rompa la nuca</p>
-                </div>
-            </div>
-        </div>
+                </article>
+            </section>
+        </main>
 
         <!-- Detail View (Hidden by default) -->
         <section id="detail" class="view hidden">
             <div class="detail-container">
-                <button id="back-btn" class="back-btn">
-                    <i data-lucide="arrow-left"></i> Volver al Ranking
+                <button id="back-btn" class="back-btn" aria-label="Volver al ranking">
+                    <i data-lucide="arrow-left" aria-hidden="true"></i> Volver al Ranking
                 </button>
-                <div id="restaurant-content">
+                <article id="restaurant-content">
                     <!-- Detail content injected here -->
-                </div>
+                </article>
             </div>
         </section>
 
@@ -97,9 +105,9 @@
     </div>
 
     <!-- Lightbox -->
-    <div id="lightbox">
-        <button id="lightbox-close">&times;</button>
-        <img id="lightbox-img" src="" alt="Zoom">
+    <div id="lightbox" role="dialog" aria-modal="true" aria-label="Visor de imágenes">
+        <button id="lightbox-close" aria-label="Cerrar visor de imágenes">&times;</button>
+        <img id="lightbox-img" src="" alt="Imagen ampliada">
     </div>
 
     <!-- JavaScript -->

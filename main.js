@@ -9,7 +9,6 @@ const GOOGLE_SHEETS = {
     andy: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1438813672'
 };
 
-// URL principal
 const GOOGLE_SHEET_CSV_URL = GOOGLE_SHEETS.main;
 
 const MOCK_DATA = [
@@ -19,80 +18,42 @@ const MOCK_DATA = [
     { rank: 4, name: "Oteque", rating: "9.5", description: "Minimalismo y elegancia en Río de Janeiro.", location: "Río, Brasil" }
 ];
 
-const MOCK_VISITS = [
-    { date: "15 DIC 2024", critic: "M. Michelin", comment: "Una experiencia sublime que redefine la cocina moderna.", images: ["https://picsum.photos/400/400?random=1", "https://picsum.photos/400/400?random=2"] },
-    { date: "02 NOV 2024", critic: "J. Gold", comment: "Los matices de los sabores locales son impresionantes.", images: ["https://picsum.photos/400/400?random=3"] }
-];
-
 // --- APP STATE ---
 let restaurants = [];
-// Store data for each critic
-let criticsData = {
-    wil: [],
-    fer: [],
-    colo: [],
-    andy: []
-};
+let criticsData = { wil: [], fer: [], colo: [], andy: [] };
 
-// --- DOM ELEMENTS ---
-const rankingList = document.getElementById('ranking-list');
-const homeView = document.getElementById('home');
-const detailView = document.getElementById('detail');
-const restaurantContent = document.getElementById('restaurant-content');
-const backBtn = document.getElementById('back-btn');
-const header = document.querySelector('.header');
-const settingsBtn = document.getElementById('settings-btn');
-const settingsMenu = document.getElementById('settings-menu');
-const darkModeToggle = document.getElementById('dark-mode-toggle');
+// --- DOM ELEMENTS (Cached) ---
+let rankingList, homeView, detailView, restaurantContent, backBtn, header;
+let settingsBtn, settingsMenu, darkModeToggle, lightbox, lightboxImg, lightboxClose;
 
-// Init
-window.addEventListener('DOMContentLoaded', () => {
-    // initApp is called here
-    initApp();
-});
+// --- UTILITIES ---
 
-async function initApp() {
-    gsap.from('.header', { opacity: 0, y: 30, duration: 1, ease: "expo.out" });
-    // Tab Switching Logic
-    const tabBtns = document.querySelectorAll('.tab-btn');
-    const tabContents = document.querySelectorAll('.tab-content');
-
-    tabBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const target = btn.getAttribute('data-tab');
-
-            // Update buttons
-            tabBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-
-            // Update content visibility
-            tabContents.forEach(content => {
-                content.classList.add('hidden');
-            });
-            document.getElementById(`${target}-view`).classList.remove('hidden');
+/**
+ * Normalizes CSV data keys to lowercase and filters empty rows
+ */
+function normalizeData(data) {
+    const filtered = data.filter(row => Object.values(row).some(v => String(v).trim() !== ""));
+    return filtered.map(row => {
+        const standardRow = {};
+        Object.keys(row).forEach(key => {
+            standardRow[key.toLowerCase()] = row[key];
         });
-    });
-
-    fetchCriticsData();
-
-    // UI Events
-    backBtn.addEventListener('click', toggleHome);
-
-    settingsBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        settingsMenu.classList.toggle('hidden');
-    });
-
-    document.addEventListener('click', () => settingsMenu.classList.add('hidden'));
-    settingsMenu.addEventListener('click', (e) => e.stopPropagation());
-
-    darkModeToggle.addEventListener('change', () => {
-        document.body.classList.toggle('dark-mode');
-        document.body.classList.toggle('light-mode');
+        return standardRow;
     });
 }
 
-// Helper to fetch a single CSV via Promise
+/**
+ * Checks if fetched data is valid (not a login page HTML)
+ */
+function isValidData(data) {
+    if (!data || data.length === 0) return false;
+    const firstRow = data[0];
+    return !Object.keys(firstRow).some(k => k.includes('<!DOCTYPE') || k.includes('<html'));
+}
+
+/**
+ * Fetches a single CSV sheet via Promise
+ */
 function fetchSheet(url) {
     // Auto-convert edit links if needed
     if (url.includes('/edit')) {
@@ -104,34 +65,23 @@ function fetchSheet(url) {
             download: true,
             header: true,
             complete: (results) => {
-                const data = results.data || [];
-                // Filter empty rows
-                const filtered = data.filter(row => Object.values(row).some(v => String(v).trim() !== ""));
-
-                // Normalize keys to lowercase
-                const normalized = filtered.map(row => {
-                    const standardRow = {};
-                    Object.keys(row).forEach(key => {
-                        standardRow[key.toLowerCase()] = row[key];
-                    });
-                    return standardRow;
-                });
-
+                const normalized = normalizeData(results.data || []);
                 resolve(normalized);
             },
             error: (err) => {
-                console.warn(`Error fetching specific sheet: ${url}`, err);
-                resolve([]); // Resolve with empty array on error to not break Promise.all
+                console.warn(`Error fetching sheet: ${url}`, err);
+                resolve([]); // Resolve with empty array to not break Promise.all
             }
         });
     });
 }
 
+/**
+ * Fetches all critics data and main data
+ */
 function fetchCriticsData() {
-    // 1. Fetch MAIN data (Ranking + Photos)
-    // 2. Fetch Critics data (Scores)
     const promises = [
-        fetchSheet(GOOGLE_SHEETS.main).then(data => { return data; }), // Index 0: Main Data
+        fetchSheet(GOOGLE_SHEETS.main),
         fetchSheet(GOOGLE_SHEETS.wil).then(data => { criticsData.wil = data; return data; }),
         fetchSheet(GOOGLE_SHEETS.fer).then(data => { criticsData.fer = data; return data; }),
         fetchSheet(GOOGLE_SHEETS.colo).then(data => { criticsData.colo = data; return data; }),
@@ -139,50 +89,55 @@ function fetchCriticsData() {
     ];
 
     Promise.all(promises).then(results => {
-        // Results[0] is MAIN data (ranking + photos)
         const mainData = results[0];
 
-        if (mainData && mainData.length > 0) {
-            // Check if we got a login page instead of data (private sheet check)
-            const firstRow = mainData[0];
-            if (Object.keys(firstRow).some(k => k.includes('<!DOCTYPE') || k.includes('<html'))) {
-                console.error("ERROR: El Google Sheet parece ser PRIVADO.");
-                restaurants = MOCK_DATA;
+        if (isValidData(mainData)) {
+            const hasName = Object.keys(mainData[0]).some(k => k === 'name' || k === 'nombre');
+            if (hasName) {
+                restaurants = mainData.map((r, index) => ({
+                    ...r,
+                    name: r.name || r.nombre,
+                    rating: r.rating || r.promedio || r.score || '0',
+                    rank: index + 1,
+                    description: r.description || r.descripcion || ''
+                }));
             } else {
-                // Check if we have a 'name' or 'nombre' column
-                const hasName = Object.keys(firstRow).some(k => k === 'name' || k === 'nombre');
-                if (hasName) {
-                    restaurants = mainData.map((r, index) => ({
-                        ...r,
-                        name: r.name || r.nombre, // Normalize name property
-                        rating: r.rating || r.promedio || r.score || '0',
-                        rank: index + 1,
-                        description: r.description || r.descripcion || ''
-                    }));
-                } else {
-                    restaurants = MOCK_DATA;
-                }
+                console.warn("No 'name' column found, using MOCK_DATA");
+                restaurants = MOCK_DATA;
             }
         } else {
-            console.warn("No main data found, using MOCK_DATA");
+            console.warn("Invalid or empty data, using MOCK_DATA");
             restaurants = MOCK_DATA;
         }
 
         console.log("Datos cargados:", { restaurants, criticsData });
         renderRanking();
+    }).catch(err => {
+        console.error("Error loading data:", err);
+        restaurants = MOCK_DATA;
+        renderRanking();
     });
 }
 
+/**
+ * Gets medal class for top 3 rankings
+ */
+function getMedalClass(rank) {
+    if (rank === 1) return 'top-1';
+    if (rank === 2) return 'top-2';
+    if (rank === 3) return 'top-3';
+    return '';
+}
+
+/**
+ * Renders the ranking list
+ */
 function renderRanking() {
     rankingList.innerHTML = '';
     restaurants.forEach((res, i) => {
         const item = document.createElement('div');
         const rank = parseInt(res.rank || i + 1);
-        let medalClass = '';
-        if (rank === 1) medalClass = 'top-1';
-        else if (rank === 2) medalClass = 'top-2';
-        else if (rank === 3) medalClass = 'top-3';
-
+        const medalClass = getMedalClass(rank);
         const visitDate = res.date || res.fecha || '';
         const rating = res.rating || '0';
 
@@ -213,30 +168,141 @@ function renderRanking() {
     gsap.to('.ranking-item', { opacity: 1, y: 0, stagger: 0.1, duration: 0.8, ease: "power4.out" });
 }
 
+// --- DETAIL VIEW HELPERS ---
+
+/**
+ * Finds photos for a restaurant from critics data
+ */
+function findPhotosForRestaurant(restaurantName, mainPhotos) {
+    if (mainPhotos && mainPhotos.trim()) {
+        return mainPhotos;
+    }
+
+    // Search in all critics' data
+    const criticNames = ['wil', 'fer', 'colo', 'andy'];
+    for (const critic of criticNames) {
+        const data = criticsData[critic] || [];
+        const criticRes = data.find(r =>
+            (r.nombre && r.nombre.toLowerCase().trim() === restaurantName.toLowerCase().trim()) ||
+            (r.name && r.name.toLowerCase().trim() === restaurantName.toLowerCase().trim())
+        );
+
+        if (criticRes) {
+            const criticPhotos = criticRes.fotos || criticRes.images || criticRes.photos;
+            if (criticPhotos && criticPhotos.trim()) {
+                console.log(`Fotos encontradas en pestaña de ${critic}`);
+                return criticPhotos;
+            }
+        }
+    }
+    return '';
+}
+
+/**
+ * Generates photos gallery HTML
+ */
+function generatePhotosGalleryHTML(photosString) {
+    if (!photosString || !photosString.trim()) {
+        return `
+            <div style="margin-top: 1.5rem; padding: 2rem; text-align: center; color: var(--text-muted);">
+                <i data-lucide="image-off" style="width: 48px; height: 48px; margin: 0 auto 1rem; opacity: 0.3;"></i>
+                <p style="font-size: 1rem;">No hay fotos para este evento</p>
+            </div>
+        `;
+    }
+
+    const photos = photosString.split(';').map(url => url.trim()).filter(url => url.length > 0);
+
+    return `
+        <div class="gallery" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 1.5rem;">
+            ${photos.map(img => `<img src="${img}" class="gallery-img" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer; transition: opacity 0.2s;" onclick="openLightbox('${img}')">`).join('')}
+        </div>
+    `;
+}
+
+/**
+ * Generates scores table HTML
+ */
+function generateScoresTableHTML(restaurantName) {
+    const criticNames = ['wil', 'fer', 'colo', 'andy'];
+    let rowsHtml = '';
+    let hasData = false;
+
+    criticNames.forEach(critic => {
+        const data = criticsData[critic] || [];
+        const criticRes = data.find(r =>
+            (r.nombre && r.nombre.toLowerCase().trim() === restaurantName.toLowerCase().trim()) ||
+            (r.name && r.name.toLowerCase().trim() === restaurantName.toLowerCase().trim())
+        );
+
+        if (criticRes) {
+            hasData = true;
+            const avg = criticRes.promedio || criticRes.average || criticRes.rating || '-';
+            const food = criticRes.comida || criticRes.food || '-';
+            const place = criticRes.lugar || criticRes.place || criticRes.ambience || '-';
+            const service = criticRes.atencion || criticRes.service || '-';
+
+            rowsHtml += `
+                <tr class="score-row">
+                    <td class="col-critic">${critic}</td>
+                    <td class="col-score col-avg">${avg}</td>
+                    <td class="col-score">${food}</td>
+                    <td class="col-score">${place}</td>
+                    <td class="col-score">${service}</td>
+                </tr>
+            `;
+        }
+    });
+
+    if (!hasData) {
+        return `
+            <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
+                <p style="font-size: 0.9rem;">No hay detalles de puntajes para este lugar.</p>
+            </div>
+        `;
+    }
+
+    return `
+        <table class="scores-table">
+            <thead>
+                <tr class="score-header-row">
+                    <th style="text-align: left;">Crítico</th>
+                    <th>Prom.</th>
+                    <th><i data-lucide="utensils" class="header-icon"></i> Comida</th>
+                    <th><i data-lucide="armchair" class="header-icon"></i> Lugar</th>
+                    <th><i data-lucide="thumbs-up" class="header-icon"></i> Atención</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rowsHtml}
+            </tbody>
+        </table>
+    `;
+}
+
+/**
+ * Shows restaurant detail view
+ */
 function showDetail(res) {
     console.log("--- DEBUG DETALLE ---");
     console.log("Datos del restaurante:", res);
-    console.log("Fotos raw:", res.fotos, res.images, res.photos);
 
     const visitDate = res.date || res.fecha || '';
     const rating = res.rating || '0';
     const rank = parseInt(res.rank || 0);
+    const medalClass = getMedalClass(rank);
 
-    // Nueva logica de ubicacion (Iconos)
+    // Location data
     const address = res.address || res.direccion || '';
     const phone = res.phone || res.telefono || '';
     const instagram = res.instagram || '';
-
-    // Links logic
     const mapLink = res.link_mapa || res.google_maps || '';
-    const addressLink = res.link_direccion || (address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : '');
-    const phoneLink = phone ? `tel:${phone.replace(/\D/g, '')}` : '';
+
     const instagramLink = instagram ? `https://instagram.com/${instagram.replace('@', '').replace('https://instagram.com/', '')}` : '';
 
-    let medalClass = '';
-    if (rank === 1) medalClass = 'top-1';
-    else if (rank === 2) medalClass = 'top-2';
-    else if (rank === 3) medalClass = 'top-3';
+    // Find photos
+    const mainPhotos = res.fotos || res.images || res.photos || '';
+    const photosString = findPhotosForRestaurant(res.name, mainPhotos);
 
     restaurantContent.innerHTML = `
         <div class="detail-header">
@@ -270,19 +336,19 @@ function showDetail(res) {
         </div>
         
         <div class="detail-info-list">
-            <!-- 1) Dirección (Pin de Mapa + Texto Raw) -->
+            <!-- 1) Dirección -->
             <div class="info-item ${address ? 'active' : 'inactive'}">
                 <i data-lucide="map-pin"></i>
                 <span>${address || 'Dirección no disponible'}</span>
             </div>
 
-            <!-- 2) Teléfono (Icono + Texto Raw) -->
+            <!-- 2) Teléfono -->
             <div class="info-item ${phone ? 'active' : 'inactive'}">
                 <i data-lucide="phone"></i>
                 <span>${phone || 'Teléfono no disponible'}</span>
             </div>
 
-            <!-- 3) Instagram (Icono + Link "Ver el IG del local") -->
+            <!-- 3) Instagram -->
             ${instagramLink ?
             `<a href="${instagramLink}" target="_blank" class="info-item active link">
                     <i data-lucide="instagram"></i>
@@ -294,7 +360,7 @@ function showDetail(res) {
                 </div>`
         }
 
-            <!-- 4) Mapa (Icono + Link "Ir al local") -->
+            <!-- 4) Mapa -->
             ${mapLink ?
             `<a href="${mapLink}" target="_blank" class="info-item active link">
                     <i data-lucide="map"></i>
@@ -314,56 +380,7 @@ function showDetail(res) {
             </div>
             
             <div id="fotos-content" class="sub-tab-content">
-                ${(() => {
-            // 1. Intentar obtener fotos del objeto principal (res)
-            let photosString = res.fotos || res.images || res.photos || '';
-
-            // 2. Si no hay fotos en res, buscar en todos los críticos
-            if (!photosString && typeof criticsData !== 'undefined') {
-                const criticNames = ['wil', 'fer', 'colo', 'andy'];
-                for (const critic of criticNames) {
-                    const data = criticsData[critic] || [];
-                    const criticRes = data.find(r =>
-                        (r.nombre && r.nombre.toLowerCase().trim() === res.name.toLowerCase().trim()) ||
-                        (r.name && r.name.toLowerCase().trim() === res.name.toLowerCase().trim())
-                    );
-
-                    if (criticRes) {
-                        const criticPhotos = criticRes.fotos || criticRes.images || criticRes.photos;
-                        if (criticPhotos && criticPhotos.trim()) {
-                            photosString = criticPhotos;
-                            console.log(`Fotos encontradas en pestaña de ${critic}`);
-                            break; // Encontramos fotos, detenemos la búsqueda
-                        }
-                    }
-                }
-            }
-
-            let photos = [];
-            if (photosString && photosString.trim()) {
-                // Separar por punto y coma y limpiar espacios
-                photos = photosString.split(';')
-                    .map(url => url.trim())
-                    .filter(url => url.length > 0);
-            }
-
-            // Si hay fotos, mostrar la galería
-            if (photos.length > 0) {
-                return `
-                            <div class="gallery" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 1.5rem;">
-                                ${photos.map(img => `<img src="${img}" class="gallery-img" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer; transition: opacity 0.2s;" onclick="openLightbox('${img}')">`).join('')}
-                            </div>
-                        `;
-            } else {
-                // Si no hay fotos, mostrar mensaje
-                return `
-                            <div style="margin-top: 1.5rem; padding: 2rem; text-align: center; color: var(--text-muted);">
-                                <i data-lucide="image-off" style="width: 48px; height: 48px; margin: 0 auto 1rem; opacity: 0.3;"></i>
-                                <p style="font-size: 1rem;">No hay fotos para este evento</p>
-                            </div>
-                        `;
-            }
-        })()}
+                ${generatePhotosGalleryHTML(photosString)}
             </div>
             
             <div id="puntajes-content" class="sub-tab-content hidden">
@@ -463,62 +480,7 @@ function showDetail(res) {
                     }
                 </style>
                 <div class="scores-table-container">
-                    ${(() => {
-            const criticNames = ['wil', 'fer', 'colo', 'andy'];
-            let rowsHtml = '';
-            let hasData = false;
-
-            criticNames.forEach(critic => {
-                const data = criticsData[critic] || [];
-                const criticRes = data.find(r =>
-                    (r.nombre && r.nombre.toLowerCase().trim() === res.name.toLowerCase().trim()) ||
-                    (r.name && r.name.toLowerCase().trim() === res.name.toLowerCase().trim())
-                );
-
-                if (criticRes) {
-                    hasData = true;
-                    const avg = criticRes.promedio || criticRes.average || criticRes.rating || '-';
-                    const food = criticRes.comida || criticRes.food || '-';
-                    const place = criticRes.lugar || criticRes.place || criticRes.ambience || '-';
-                    const service = criticRes.atencion || criticRes.service || '-';
-
-                    rowsHtml += `
-                                    <tr class="score-row">
-                                        <td class="col-critic">${critic}</td>
-                                        <td class="col-score col-avg">${avg}</td>
-                                        <td class="col-score">${food}</td>
-                                        <td class="col-score">${place}</td>
-                                        <td class="col-score">${service}</td>
-                                    </tr>
-                                `;
-                }
-            });
-
-            if (!hasData) {
-                return `
-                                <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
-                                    <p style="font-size: 0.9rem;">No hay detalles de puntajes para este lugar.</p>
-                                </div>
-                            `;
-            }
-
-            return `
-                        <table class="scores-table">
-                            <thead>
-                                <tr class="score-header-row">
-                                    <th style="text-align: left;">Crítico</th>
-                                    <th>Prom.</th>
-                                    <th><i data-lucide="utensils" class="header-icon"></i> Comida</th>
-                                    <th><i data-lucide="armchair" class="header-icon"></i> Lugar</th>
-                                    <th><i data-lucide="thumbs-up" class="header-icon"></i> Atención</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${rowsHtml}
-                            </tbody>
-                        </table>
-                        `;
-        })()}
+                    ${generateScoresTableHTML(res.name)}
                 </div>
             </div>
         </div>
@@ -528,6 +490,23 @@ function showDetail(res) {
     lucide.createIcons();
 
     // Sub-tab logic
+    setupSubTabs();
+
+    // Transition animation
+    const tl = gsap.timeline();
+    tl.to(homeView, {
+        opacity: 0, duration: 0.3, onComplete: () => {
+            homeView.classList.add('hidden');
+            detailView.classList.remove('hidden');
+            gsap.fromTo('.detail-container', { opacity: 0 }, { opacity: 1, duration: 0.5 });
+        }
+    });
+}
+
+/**
+ * Sets up sub-tab switching logic
+ */
+function setupSubTabs() {
     document.querySelectorAll('.sub-tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -542,17 +521,11 @@ function showDetail(res) {
             document.getElementById(`${target}-content`).classList.remove('hidden');
         });
     });
-
-    const tl = gsap.timeline();
-    tl.to(homeView, {
-        opacity: 0, duration: 0.3, onComplete: () => {
-            homeView.classList.add('hidden');
-            detailView.classList.remove('hidden');
-            gsap.fromTo('.detail-container', { opacity: 0 }, { opacity: 1, duration: 0.5 });
-        }
-    });
 }
 
+/**
+ * Toggles back to home view
+ */
 function toggleHome() {
     const tl = gsap.timeline();
     tl.to('.detail-container', {
@@ -561,49 +534,131 @@ function toggleHome() {
             homeView.classList.remove('hidden');
         }
     });
-
     tl.to(homeView, { opacity: 1, duration: 0.4 });
 }
 
-// Lightbox Logic
+// --- TAB MANAGEMENT ---
+
+/**
+ * Sets up main tab switching
+ */
+function setupMainTabs() {
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.getAttribute('data-tab');
+
+            // Update buttons
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Update content visibility
+            tabContents.forEach(content => content.classList.add('hidden'));
+            document.getElementById(`${target}-view`).classList.remove('hidden');
+        });
+    });
+}
+
+// --- LIGHTBOX ---
+
 window.openLightbox = function (src) {
-    const lightbox = document.getElementById('lightbox');
-    const lightboxImg = document.getElementById('lightbox-img');
     if (lightbox && lightboxImg) {
         lightboxImg.src = src;
         lightbox.classList.add('visible');
     }
-}
+};
 
 window.closeLightbox = function () {
-    const lightbox = document.getElementById('lightbox');
     if (lightbox) {
         lightbox.classList.remove('visible');
         setTimeout(() => {
-            const lightboxImg = document.getElementById('lightbox-img');
             if (lightboxImg) lightboxImg.src = '';
         }, 300);
     }
-}
+};
 
-document.addEventListener('DOMContentLoaded', () => {
-    const lightbox = document.getElementById('lightbox');
-    const closeBtn = document.getElementById('lightbox-close');
-
+/**
+ * Sets up lightbox event listeners
+ */
+function setupLightbox() {
     if (lightbox) {
         lightbox.addEventListener('click', (e) => {
-            if (e.target === lightbox) {
-                closeLightbox();
-            }
+            if (e.target === lightbox) closeLightbox();
         });
     }
 
-    if (closeBtn) {
-        closeBtn.addEventListener('click', closeLightbox);
+    if (lightboxClose) {
+        lightboxClose.addEventListener('click', closeLightbox);
     }
 
     // Close on Escape key
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeLightbox();
     });
-});
+}
+
+// --- SETTINGS ---
+
+/**
+ * Sets up settings menu and dark mode toggle
+ */
+function setupSettings() {
+    settingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        settingsMenu.classList.toggle('hidden');
+    });
+
+    document.addEventListener('click', () => settingsMenu.classList.add('hidden'));
+    settingsMenu.addEventListener('click', (e) => e.stopPropagation());
+
+    darkModeToggle.addEventListener('change', () => {
+        document.body.classList.toggle('dark-mode');
+        document.body.classList.toggle('light-mode');
+    });
+}
+
+// --- INITIALIZATION ---
+
+/**
+ * Caches all DOM elements
+ */
+function cacheDOMElements() {
+    rankingList = document.getElementById('ranking-list');
+    homeView = document.getElementById('home');
+    detailView = document.getElementById('detail');
+    restaurantContent = document.getElementById('restaurant-content');
+    backBtn = document.getElementById('back-btn');
+    header = document.querySelector('.header');
+    settingsBtn = document.getElementById('settings-btn');
+    settingsMenu = document.getElementById('settings-menu');
+    darkModeToggle = document.getElementById('dark-mode-toggle');
+    lightbox = document.getElementById('lightbox');
+    lightboxImg = document.getElementById('lightbox-img');
+    lightboxClose = document.getElementById('lightbox-close');
+}
+
+/**
+ * Main initialization function
+ */
+function initApp() {
+    cacheDOMElements();
+
+    // Header animation
+    gsap.from('.header', { opacity: 0, y: 30, duration: 1, ease: "expo.out" });
+
+    // Setup all event listeners
+    setupMainTabs();
+    setupSettings();
+    setupLightbox();
+
+    // Back button
+    backBtn.addEventListener('click', toggleHome);
+
+    // Fetch data
+    fetchCriticsData();
+}
+
+// Single DOMContentLoaded listener
+document.addEventListener('DOMContentLoaded', initApp);
