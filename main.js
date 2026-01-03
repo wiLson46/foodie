@@ -20,11 +20,13 @@ const MOCK_DATA = [
 
 // --- APP STATE ---
 let restaurants = [];
+let filteredRestaurants = [];
 let criticsData = { wil: [], fer: [], colo: [], andy: [] };
 
 // --- DOM ELEMENTS (Cached) ---
 let rankingList, homeView, detailView, restaurantContent, backBtn, header;
 let settingsBtn, settingsMenu, darkModeToggle, lightbox, lightboxImg, lightboxClose;
+let locationFilterContainer, locationFilter;
 
 // --- UTILITIES ---
 
@@ -111,12 +113,56 @@ function fetchCriticsData() {
         }
 
         console.log("Datos cargados:", { restaurants, criticsData });
+        filteredRestaurants = [...restaurants];
+        populateLocationFilter();
         renderRanking();
     }).catch(err => {
         console.error("Error loading data:", err);
         restaurants = MOCK_DATA;
+        filteredRestaurants = [...restaurants];
+        populateLocationFilter();
         renderRanking();
     });
+}
+
+/**
+ * Populates the location filter dropdown with unique locations
+ */
+function populateLocationFilter() {
+    if (!locationFilter) return;
+
+    // Extract unique locations
+    const locations = new Set();
+    restaurants.forEach(res => {
+        const location = res.location || 'Sin ubicación';
+        if (location) locations.add(location);
+    });
+
+    // Clear existing options except "All"
+    locationFilter.innerHTML = '<option value="all">Todas las ubicaciones</option>';
+
+    // Add unique locations
+    Array.from(locations).sort().forEach(location => {
+        const option = document.createElement('option');
+        option.value = location;
+        option.textContent = location;
+        locationFilter.appendChild(option);
+    });
+}
+
+/**
+ * Filters restaurants by location
+ */
+function filterByLocation(selectedLocation) {
+    if (selectedLocation === 'all') {
+        filteredRestaurants = [...restaurants];
+    } else {
+        filteredRestaurants = restaurants.filter(res => {
+            const location = res.location || 'Sin ubicación';
+            return location === selectedLocation;
+        });
+    }
+    renderRanking();
 }
 
 /**
@@ -134,7 +180,15 @@ function getMedalClass(rank) {
  */
 function renderRanking() {
     rankingList.innerHTML = '';
-    restaurants.forEach((res, i) => {
+    const dataToRender = filteredRestaurants.length > 0 ? filteredRestaurants : restaurants;
+
+    if (dataToRender.length === 0) {
+        rankingList.innerHTML = '<div style="text-align: center; padding: 3rem; color: var(--text-muted);">No se encontraron restaurantes para esta ubicación.</div>';
+        lucide.createIcons();
+        return;
+    }
+
+    dataToRender.forEach((res, i) => {
         const item = document.createElement('div');
         const rank = parseInt(res.rank || i + 1);
         const medalClass = getMedalClass(rank);
@@ -550,6 +604,16 @@ function setupMainTabs() {
         btn.addEventListener('click', () => {
             const target = btn.getAttribute('data-tab');
 
+            // Show/hide location filter with animation
+            if (target === 'ranking') {
+                setTimeout(() => {
+                    locationFilterContainer.classList.add('show');
+                    lucide.createIcons();
+                }, 100);
+            } else {
+                locationFilterContainer.classList.remove('show');
+            }
+
             // Update buttons
             tabBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
@@ -635,8 +699,17 @@ function cacheDOMElements() {
     settingsMenu = document.getElementById('settings-menu');
     darkModeToggle = document.getElementById('dark-mode-toggle');
     lightbox = document.getElementById('lightbox');
+    locationFilterContainer = document.getElementById('location-filter-container');
+    locationFilter = document.getElementById('location-filter');
     lightboxImg = document.getElementById('lightbox-img');
     lightboxClose = document.getElementById('lightbox-close');
+
+    // Setup location filter listener
+    if (locationFilter) {
+        locationFilter.addEventListener('change', (e) => {
+            filterByLocation(e.target.value);
+        });
+    }
 }
 
 /**
@@ -655,6 +728,15 @@ function initApp() {
 
     // Back button
     backBtn.addEventListener('click', toggleHome);
+
+    // Show location filter on load if ranking tab is active
+    setTimeout(() => {
+        const activeTab = document.querySelector('.tab-btn.active');
+        if (activeTab && activeTab.getAttribute('data-tab') === 'ranking') {
+            locationFilterContainer.classList.add('show');
+            lucide.createIcons();
+        }
+    }, 100);
 
     // Fetch data
     fetchCriticsData();
