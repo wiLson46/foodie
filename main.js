@@ -1,15 +1,25 @@
 
 // --- CONFIG & DATA ---
-const GOOGLE_SHEETS = {
-    // La hoja principal contiene el ranking general y las fotos (Columna G)
-    main: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv',
-    wil: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=667637220',
-    fer: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=445878910',
-    colo: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1592300088',
-    andy: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1438813672'
+const CONFIG = {
+    presencial: {
+        main: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv',
+        critics: {
+            wil: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=667637220',
+            fer: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=445878910',
+            colo: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1592300088',
+            andy: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1438813672'
+        },
+        tabs: ['ranking', 'map']
+    },
+    delivery: {
+        main: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=2117542404',
+        critics: {
+            wil: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1858951681'
+            // Add more critics here when available
+        },
+        tabs: ['ranking']
+    }
 };
-
-const GOOGLE_SHEET_CSV_URL = GOOGLE_SHEETS.main;
 
 const MOCK_DATA = [
     { rank: 1, name: "Pujol", rating: "9.8", description: "Cocina mexicana de autor en las manos de Enrique Olvera.", location: "CDMX, México" },
@@ -21,8 +31,9 @@ const MOCK_DATA = [
 // --- APP STATE ---
 let restaurants = [];
 let filteredRestaurants = [];
-let criticsData = { wil: [], fer: [], colo: [], andy: [] };
+let criticsData = { wil: [], fer: [], colo: [], andy: [] }; // This will be dynamic based on mode
 let currentSort = 'score'; // Default sort order
+let currentMode = 'presencial'; // 'presencial' | 'delivery'
 
 // --- DOM ELEMENTS (Cached) ---
 let rankingList, homeView, detailView, restaurantContent, backBtn, header;
@@ -83,13 +94,29 @@ function fetchSheet(url) {
  * Fetches all critics data and main data
  */
 function fetchCriticsData() {
+    const config = CONFIG[currentMode];
+
+    // Reset critics data structure
+    criticsData = {};
+    const criticsPromises = [];
+    const criticsKeys = Object.keys(config.critics);
+
+    criticsKeys.forEach(key => {
+        criticsPromises.push(
+            fetchSheet(config.critics[key]).then(data => {
+                criticsData[key] = data;
+                return data;
+            })
+        );
+    });
+
     const promises = [
-        fetchSheet(GOOGLE_SHEETS.main),
-        fetchSheet(GOOGLE_SHEETS.wil).then(data => { criticsData.wil = data; return data; }),
-        fetchSheet(GOOGLE_SHEETS.fer).then(data => { criticsData.fer = data; return data; }),
-        fetchSheet(GOOGLE_SHEETS.colo).then(data => { criticsData.colo = data; return data; }),
-        fetchSheet(GOOGLE_SHEETS.andy).then(data => { criticsData.andy = data; return data; })
+        fetchSheet(config.main),
+        ...criticsPromises
     ];
+
+    // Show loading state
+    rankingList.innerHTML = '<div class="loader">Cargando la selección...</div>';
 
     Promise.all(promises).then(results => {
         const mainData = results[0];
@@ -102,7 +129,8 @@ function fetchCriticsData() {
                     name: r.name || r.nombre,
                     rating: r.rating || r.promedio || r.score || '0',
                     rank: index + 1,
-                    description: r.description || r.descripcion || ''
+                    description: r.description || r.descripcion || '',
+                    orderedBy: r['pedido por'] || r.pedido_por || ''
                 }));
             } else {
                 console.warn("No 'name' column found, using MOCK_DATA");
@@ -113,7 +141,7 @@ function fetchCriticsData() {
             restaurants = MOCK_DATA;
         }
 
-        console.log("Datos cargados:", { restaurants, criticsData });
+        console.log("Datos cargados:", { mode: currentMode, restaurants, criticsData });
         filteredRestaurants = [...restaurants];
         populateLocationFilter();
         applySort(); // Apply initial sort
@@ -275,7 +303,8 @@ function findPhotosForRestaurant(restaurantName, mainPhotos) {
     }
 
     // Search in all critics' data
-    const criticNames = ['wil', 'fer', 'colo', 'andy'];
+    // Search in all critics' data
+    const criticNames = Object.keys(criticsData);
     for (const critic of criticNames) {
         const data = criticsData[critic] || [];
         const criticRes = data.find(r =>
@@ -320,7 +349,7 @@ function generatePhotosGalleryHTML(photosString) {
  * Generates scores table HTML
  */
 function generateScoresTableHTML(restaurantName) {
-    const criticNames = ['wil', 'fer', 'colo', 'andy'];
+    const criticNames = Object.keys(criticsData);
     let rowsHtml = '';
     let hasData = false;
 
@@ -333,22 +362,34 @@ function generateScoresTableHTML(restaurantName) {
 
         if (criticRes) {
             hasData = true;
+            const isDelivery = currentMode === 'delivery';
             const avg = criticRes.promedio || criticRes.average || criticRes.rating || '-';
             const food = criticRes.comida || criticRes.food || '-';
-            const place = criticRes.lugar || criticRes.place || criticRes.ambience || '-';
-            const service = criticRes.atencion || criticRes.service || '-';
+
+            let col3, col4;
+            if (isDelivery) {
+                // Delivery columns: Envio, Precio
+                col3 = criticRes.envio || criticRes['envio'] || '-';
+                col4 = criticRes.precio || criticRes.price || '-';
+            } else {
+                // Presencial columns: Lugar, Atencion
+                col3 = criticRes.lugar || criticRes.place || criticRes.ambience || '-';
+                col4 = criticRes.atencion || criticRes.service || '-';
+            }
 
             rowsHtml += `
                 <tr class="score-row">
                     <td class="col-critic">${critic}</td>
                     <td class="col-score col-avg">${avg}</td>
                     <td class="col-score">${food}</td>
-                    <td class="col-score">${place}</td>
-                    <td class="col-score">${service}</td>
+                    <td class="col-score">${col3}</td>
+                    <td class="col-score">${col4}</td>
                 </tr>
             `;
         }
     });
+
+    const isDelivery = currentMode === 'delivery';
 
     if (!hasData) {
         return `
@@ -365,8 +406,12 @@ function generateScoresTableHTML(restaurantName) {
                     <th style="text-align: left;">Crítico</th>
                     <th>Prom.</th>
                     <th><i data-lucide="utensils" class="header-icon"></i> Comida</th>
-                    <th><i data-lucide="armchair" class="header-icon"></i> Lugar</th>
-                    <th><i data-lucide="thumbs-up" class="header-icon"></i> Atención</th>
+                    ${isDelivery ?
+            `<th><i data-lucide="bike" class="header-icon"></i> Envío</th>
+                     <th><i data-lucide="dollar-sign" class="header-icon"></i> Precio</th>` :
+            `<th><i data-lucide="armchair" class="header-icon"></i> Lugar</th>
+                     <th><i data-lucide="thumbs-up" class="header-icon"></i> Atención</th>`
+        }
                 </tr>
             </thead>
             <tbody>
@@ -417,6 +462,7 @@ function showDetail(res, updateHash = true) {
     const phone = res.phone || res.telefono || '';
     const instagram = res.instagram || '';
     const mapLink = res['link mapa'] || res.link_mapa || res.google_maps || '';
+    const orderedBy = res.orderedBy || '';
 
     const instagramLink = instagram ? `https://instagram.com/${instagram.replace('@', '').replace('https://instagram.com/', '')}` : '';
 
@@ -452,6 +498,9 @@ function showDetail(res, updateHash = true) {
                 <div class="detail-description">
                     <p>${res.description || ''}</p>
                 </div>
+                
+            </div>
+
             </div>
         </div>
         
@@ -480,16 +529,24 @@ function showDetail(res, updateHash = true) {
                 </div>`
         }
 
-            <!-- 4) Mapa -->
-            ${mapLink ?
+            <!-- 4) Mapa (Presencial only) -->
+            ${(mapLink && currentMode === 'presencial') ?
             `<a href="${mapLink}" target="_blank" class="info-item active link">
                     <i data-lucide="map"></i>
                     <span>Ir al local</span>
                 </a>` :
-            `<div class="info-item inactive">
+            (currentMode === 'presencial' ? `<div class="info-item inactive">
                     <i data-lucide="map"></i>
                     <span>Ir al local</span>
-                </div>`
+                </div>` : '')
+        }
+
+            <!-- 5) Pedido por (Delivery only) -->
+             ${orderedBy ?
+            `<div class="info-item active">
+                    <i data-lucide="shopping-bag"></i>
+                    <span>Pedido por: <strong>${orderedBy}</strong></span>
+                </div>` : ''
         }
         </div>
         
@@ -798,20 +855,21 @@ function cacheDOMElements() {
     settingsMenu = document.getElementById('settings-menu');
     darkModeToggle = document.getElementById('dark-mode-toggle');
     lightbox = document.getElementById('lightbox');
-    locationFilterContainer = document.getElementById('location-filter-container');
-    locationFilter = document.getElementById('location-filter');
     lightboxImg = document.getElementById('lightbox-img');
     lightboxClose = document.getElementById('lightbox-close');
+    locationFilterContainer = document.getElementById('location-filter-container');
+    locationFilter = document.getElementById('location-filter');
+    sortFilter = document.getElementById('sort-filter');
+}
 
-    // Setup location filter listener
+// Setup location filter listener (moved to init or separate setup, but keeping logic consistent)
+function setupFilters() {
     if (locationFilter) {
         locationFilter.addEventListener('change', (e) => {
             filterByLocation(e.target.value);
         });
     }
 
-    // Sort filter listener
-    sortFilter = document.getElementById('sort-filter');
     if (sortFilter) {
         sortFilter.addEventListener('change', (e) => {
             currentSort = e.target.value;
@@ -819,6 +877,52 @@ function cacheDOMElements() {
             renderRanking();
         });
     }
+}
+
+/**
+ * Sets up mode switcher
+ */
+function setupModeSwitcher() {
+    const modeBtns = document.querySelectorAll('.mode-btn');
+
+    modeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const newMode = btn.getAttribute('data-mode');
+            if (newMode === currentMode) return;
+
+            currentMode = newMode;
+
+            // Update buttons
+            modeBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Handle Tabs visibility based on mode
+            const config = CONFIG[currentMode];
+            const tabs = document.querySelectorAll('.tab-btn');
+            tabs.forEach(tab => {
+                const tabId = tab.getAttribute('data-tab');
+                if (config.tabs.includes(tabId)) {
+                    tab.style.display = 'flex';
+                } else {
+                    tab.style.display = 'none';
+                }
+            });
+
+            // If current tab is hidden, switch to first available tab (usually 'ranking')
+            const activeTab = document.querySelector('.tab-btn.active');
+            if (activeTab && activeTab.style.display === 'none') {
+                // Trigger click on ranking tab
+                document.querySelector('.tab-btn[data-tab="ranking"]').click();
+            }
+
+            // Clear existing data and re-fetch
+            restaurants = [];
+            filteredRestaurants = [];
+            rankingList.innerHTML = '<div class="loader">Cargando nueva selección...</div>';
+
+            fetchCriticsData();
+        });
+    });
 }
 
 /**
@@ -834,6 +938,8 @@ function initApp() {
     setupMainTabs();
     setupSettings();
     setupLightbox();
+    setupModeSwitcher();
+    setupFilters();
 
     // Back button
     backBtn.addEventListener('click', () => toggleHome(true));
