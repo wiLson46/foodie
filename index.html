@@ -46,8 +46,8 @@
 
         <!-- Header -->
         <header class="header">
-            <h1 class="logo">Ranking de la mensual</h1>
-            <p class="subtitle">un ranking pro</p>
+            <h1 class="logo">Comer.ar</h1>
+            <p class="subtitle">Acá te contamos la verdad de la milanga.</p>
         </header>
 
         <!-- HOME VIEW -->
@@ -58,19 +58,31 @@
                         aria-controls="ranking-view">Ranking</button>
                     <button class="tab-btn" data-tab="map" role="tab" aria-selected="false"
                         aria-controls="map-view">Mapa</button>
-                    <button class="tab-btn" data-tab="about" role="tab" aria-selected="false"
-                        aria-controls="about-view">Quiénes Somos</button>
                 </div>
 
                 <div class="location-filter-container" id="location-filter-container">
-                    <label for="location-filter" class="filter-label">
-                        <i data-lucide="map-pin" aria-hidden="true"></i>
-                        Filtrar por ubicación:
-                    </label>
-                    <select id="location-filter" class="location-select"
-                        aria-label="Filtrar restaurantes por ubicación">
-                        <option value="all">Todas las ubicaciones</option>
-                    </select>
+                    <div class="filter-group">
+                        <label for="location-filter" class="filter-label">
+                            <i data-lucide="map-pin" aria-hidden="true"></i>
+                            Filtrar por ubicación:
+                        </label>
+                        <select id="location-filter" class="location-select"
+                            aria-label="Filtrar restaurantes por ubicación">
+                            <option value="all">Todas las ubicaciones</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="sort-filter" class="filter-label">
+                            <i data-lucide="arrow-up-down" aria-hidden="true"></i>
+                            Ordenar por:
+                        </label>
+                        <select id="sort-filter" class="location-select" aria-label="Ordenar restaurantes">
+                            <option value="score">Puntaje</option>
+                            <option value="date">Fecha de visita</option>
+                            <option value="name">Nombre</option>
+                        </select>
+                    </div>
                 </div>
             </nav>
 
@@ -90,13 +102,6 @@
                 </div>
             </section>
 
-            <section id="about-view" class="tab-content hidden" role="tabpanel" aria-labelledby="about-tab">
-                <article class="about-card">
-                    <h2 style="font-family: var(--font-title); margin-bottom: 1rem;">Nuestra Historia</h2>
-                    <p>Somos un grupo de gordos.</p>
-                    <p style="margin-top: 1rem;">Nuestra misión es comer mas sin que se rompa la nuca</p>
-                </article>
-            </section>
         </main>
 
         <!-- Detail View (Hidden by default) -->

@@ -22,11 +22,12 @@ const MOCK_DATA = [
 let restaurants = [];
 let filteredRestaurants = [];
 let criticsData = { wil: [], fer: [], colo: [], andy: [] };
+let currentSort = 'score'; // Default sort order
 
 // --- DOM ELEMENTS (Cached) ---
 let rankingList, homeView, detailView, restaurantContent, backBtn, header;
 let settingsBtn, settingsMenu, darkModeToggle, lightbox, lightboxImg, lightboxClose;
-let locationFilterContainer, locationFilter;
+let locationFilterContainer, locationFilter, sortFilter;
 
 // --- UTILITIES ---
 
@@ -115,6 +116,7 @@ function fetchCriticsData() {
         console.log("Datos cargados:", { restaurants, criticsData });
         filteredRestaurants = [...restaurants];
         populateLocationFilter();
+        applySort(); // Apply initial sort
         renderRanking();
 
         // Handle hash navigation after data is loaded
@@ -168,7 +170,41 @@ function filterByLocation(selectedLocation) {
             return location === selectedLocation;
         });
     }
+    applySort();
     renderRanking();
+}
+
+/**
+ * Parses a date string in DD/MM/YYYY format
+ */
+function parseDate(dateStr) {
+    if (!dateStr) return new Date(0);
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+        // DD/MM/YYYY -> YYYY-MM-DD (ISO suitable for Date constructor)
+        return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+    }
+    return new Date(0);
+}
+
+/**
+ * Sorts the filtered restaurants based on current criteria
+ */
+function applySort() {
+    filteredRestaurants.sort((a, b) => {
+        if (currentSort === 'score') {
+            const scoreA = parseFloat(a.rating) || 0;
+            const scoreB = parseFloat(b.rating) || 0;
+            return scoreB - scoreA; // Descending
+        } else if (currentSort === 'date') {
+            const dateA = parseDate(a.date || a.fecha);
+            const dateB = parseDate(b.date || b.fecha);
+            return dateB - dateA; // Newest first
+        } else if (currentSort === 'name') {
+            return (a.name || '').localeCompare(b.name || ''); // A-Z
+        }
+        return 0;
+    });
 }
 
 /**
@@ -771,6 +807,16 @@ function cacheDOMElements() {
     if (locationFilter) {
         locationFilter.addEventListener('change', (e) => {
             filterByLocation(e.target.value);
+        });
+    }
+
+    // Sort filter listener
+    sortFilter = document.getElementById('sort-filter');
+    if (sortFilter) {
+        sortFilter.addEventListener('change', (e) => {
+            currentSort = e.target.value;
+            applySort();
+            renderRanking();
         });
     }
 }

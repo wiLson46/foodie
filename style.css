@@ -185,7 +185,7 @@ input:checked+.slider:before {
 
 .header {
     text-align: center;
-    margin-bottom: 5rem;
+    margin-bottom: 1rem;
     transform-origin: left center;
 }
 
@@ -230,6 +230,7 @@ input:checked+.slider:before {
     display: none;
     align-items: center;
     gap: 1rem;
+    flex-wrap: wrap;
     padding: 0 0.5rem;
     margin-top: 0;
     background: transparent;
@@ -250,11 +251,44 @@ input:checked+.slider:before {
 .location-filter-container.show {
     display: flex;
     opacity: 1;
-    max-height: 150px;
+    max-height: 300px;
     transform: translateY(0);
     margin-top: 1rem;
     padding: 1rem 0.5rem 0.5rem 0.5rem;
     border-top: 1px solid var(--border);
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    /* Desktop: prevent stretching */
+    flex: 0 1 auto;
+    min-width: 250px;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    .filter-group {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.3rem;
+        width: 100%;
+        min-width: 0;
+        /* Allow shrinking */
+    }
+
+    .location-select {
+        width: 100%;
+        /* Reduced height for mobile */
+        padding: 0.4rem 0.8rem;
+        font-size: 0.9rem;
+    }
+
+    .location-filter-container.show {
+        /* Allow more height for stacked items */
+        max-height: 400px;
+    }
 }
 
 .filter-label {
