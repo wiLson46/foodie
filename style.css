@@ -189,12 +189,40 @@ input:checked+.slider:before {
     transform-origin: left center;
 }
 
-.logo {
-    font-family: var(--font-title);
-    font-size: 3.2rem;
-    font-weight: 800;
-    letter-spacing: -0.05rem;
+.logo-container {
+    display: flex;
+    justify-content: center;
     margin-bottom: 0.5rem;
+}
+
+.logo-img {
+    height: 90px;
+    width: auto;
+    object-fit: contain;
+    transition: var(--transition-smooth);
+}
+
+.light-logo {
+    display: block;
+}
+
+.dark-logo {
+    display: none;
+}
+
+/* Dark Mode Logic for Logo */
+.dark-mode .light-logo {
+    display: none;
+}
+
+.dark-mode .dark-logo {
+    display: block;
+}
+
+@media (max-width: 768px) {
+    .logo-img {
+        height: 60px;
+    }
 }
 
 .subtitle {
