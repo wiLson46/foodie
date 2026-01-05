@@ -21,6 +21,8 @@ const CONFIG = {
     }
 };
 
+const PEOPLE_SCORE_SHEET = 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1841885372';
+
 const MOCK_DATA = [
     { rank: 1, name: "Pujol", rating: "9.8", description: "Cocina mexicana de autor en las manos de Enrique Olvera.", location: "CDMX, México" },
     { rank: 2, name: "Central", rating: "9.7", description: "Exploración de ecosistemas peruanos por Virgilio Martínez.", location: "Lima, Perú" },
@@ -32,6 +34,7 @@ const MOCK_DATA = [
 let restaurants = [];
 let filteredRestaurants = [];
 let criticsData = { wil: [], fer: [], colo: [], andy: [] }; // This will be dynamic based on mode
+let peopleScores = []; // New state for people's scores
 let currentSort = 'score'; // Default sort order
 let currentMode = 'presencial'; // 'presencial' | 'delivery'
 
@@ -112,7 +115,8 @@ function fetchCriticsData() {
 
     const promises = [
         fetchSheet(config.main),
-        ...criticsPromises
+        ...criticsPromises,
+        fetchSheet(PEOPLE_SCORE_SHEET) // Fetch people scores
     ];
 
     // Show loading state
@@ -120,6 +124,18 @@ function fetchCriticsData() {
 
     Promise.all(promises).then(results => {
         const mainData = results[0];
+        // People scores are the last result
+        const peopleData = results[results.length - 1];
+
+        // Parse people scores
+        if (isValidData(peopleData)) {
+            peopleScores = peopleData.map(row => ({
+                name: Object.values(row)[0] || '', // Column A
+                score: Object.values(row)[1] || '' // Column B
+            }));
+        } else {
+            peopleScores = [];
+        }
 
         if (isValidData(mainData)) {
             const hasName = Object.keys(mainData[0]).some(k => k === 'name' || k === 'nombre');
@@ -141,7 +157,7 @@ function fetchCriticsData() {
             restaurants = MOCK_DATA;
         }
 
-        console.log("Datos cargados:", { mode: currentMode, restaurants, criticsData });
+        console.log("Datos cargados:", { mode: currentMode, restaurants, criticsData, peopleScores });
         filteredRestaurants = [...restaurants];
         populateLocationFilter();
         applySort(); // Apply initial sort
@@ -440,6 +456,20 @@ function findRestaurantBySlug(slug) {
 }
 
 /**
+ * Finds people's score for a restaurant
+ */
+function getPeopleScore(restaurantName) {
+    if (!peopleScores || peopleScores.length === 0) return '-.-';
+
+    // Normalize logic similar to critics search
+    const found = peopleScores.find(p =>
+        p.name && p.name.toLowerCase().trim() === restaurantName.toLowerCase().trim()
+    );
+
+    return (found && found.score) ? found.score : '-.-';
+}
+
+/**
  * Shows restaurant detail view
  */
 function showDetail(res, updateHash = true) {
@@ -485,10 +515,19 @@ function showDetail(res, updateHash = true) {
                     <div class="date-value">${visitDate}</div>
                 </div>
 
-                <!-- Score -->
-                <div class="detail-score-box">
-                    <div class="score-label">Puntaje</div>
-                    <div class="score-value">${rating}</div>
+                <!-- Scores Wrapper -->
+                <div class="scores-wrapper">
+                    <!-- Comer.ar Score -->
+                    <div class="detail-score-box">
+                        <div class="score-label">Puntaje de Comer.ar</div>
+                        <div class="score-value">${rating}</div>
+                    </div>
+
+                    <!-- People's Score -->
+                    <div class="detail-score-box people-score-box" onclick="openSurveyModal()">
+                        <div class="score-label">Puntaje de la gente</div>
+                        <div class="score-value">${getPeopleScore(res.name)}</div>
+                    </div>
                 </div>
 
                 <!-- Location -->
@@ -798,6 +837,120 @@ window.closeLightbox = function () {
         }, 300);
     }
 };
+
+// --- SURVEY MODAL ---
+
+window.openSurveyModal = function () {
+    const modal = document.getElementById('survey-modal');
+    const container = document.getElementById('survey-container');
+
+    if (!modal || !container) return;
+
+    // Detect device for iframe sizing
+    const isMobile = window.innerWidth <= 768;
+    const width = isMobile ? "300" : "640";
+    const height = isMobile ? "600" : "946";
+
+    container.innerHTML = `
+        <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSccteyXdae90sOgyONjnyXqJCjRWk211Vjk89aMDR0_3qyr-A/viewform?embedded=true" 
+        width="${width}" height="${height}" frameborder="0" marginheight="0" marginwidth="0">Loading...</iframe>
+   `;
+
+    modal.classList.remove('hidden');
+    // Force reflow
+    void modal.offsetWidth;
+    modal.classList.add('visible');
+    document.body.style.overflow = 'hidden';
+};
+
+window.closeSurveyModal = function () {
+    const modal = document.getElementById('survey-modal');
+    if (!modal) return;
+
+    modal.classList.remove('visible');
+    setTimeout(() => {
+        modal.classList.add('hidden');
+        document.getElementById('survey-container').innerHTML = '';
+        document.body.style.overflow = '';
+    }, 300);
+};
+
+// --- INITIALIZATION ---
+
+function initApp() {
+    // Cache DOM elements
+    cacheDOMElements();
+
+    // Mode Switcher
+    setupModeSwitcher();
+
+    // Filters
+    setupFilters();
+
+    // Event Listeners
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            settingsMenu.classList.toggle('hidden');
+        });
+    }
+
+    if (backBtn) {
+        backBtn.addEventListener('click', () => toggleHome());
+    }
+
+    if (darkModeToggle) {
+        // Check system preference
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            darkModeToggle.checked = true;
+            document.body.className = 'dark-mode';
+        }
+
+        darkModeToggle.addEventListener('change', () => {
+            document.body.className = darkModeToggle.checked ? 'dark-mode' : 'light-mode';
+        });
+    }
+
+    document.addEventListener('click', (e) => {
+        if (settingsMenu && !settingsMenu.classList.contains('hidden') && !e.target.closest('.dropdown')) {
+            settingsMenu.classList.add('hidden');
+        }
+    });
+
+    // Lightbox events
+    if (lightboxClose) {
+        lightboxClose.addEventListener('click', closeLightbox);
+    }
+
+    if (lightbox) {
+        lightbox.addEventListener('click', (e) => {
+            if (e.target === lightbox) closeLightbox();
+        });
+    }
+
+    // Survey Modal events
+    const surveyClose = document.getElementById('survey-close');
+    const surveyModal = document.getElementById('survey-modal');
+
+    if (surveyClose) {
+        surveyClose.addEventListener('click', closeSurveyModal);
+    }
+
+    if (surveyModal) {
+        surveyModal.addEventListener('click', (e) => {
+            if (e.target === surveyModal) closeSurveyModal();
+        });
+    }
+
+    // Tabs
+    setupMainTabs();
+
+    // Initial Data Fetch
+    fetchCriticsData();
+}
+
+// Start App
+document.addEventListener('DOMContentLoaded', initApp);
 
 /**
  * Sets up lightbox event listeners

@@ -1237,3 +1237,117 @@ input:checked+.slider:before {
         height: 18px;
     }
 }
+
+/* ========== SURVEY MODAL ========== */
+
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.modal-backdrop.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.modal-content {
+    position: relative;
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 0;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+    max-width: 95vw;
+    max-height: 95vh;
+}
+
+.modal-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.1);
+    border: none;
+    color: var(--text-main);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 10;
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-close:hover {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.dark-mode .modal-close {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.dark-mode .modal-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* ========== SCORE UPDATES ========== */
+
+.scores-wrapper {
+    grid-area: score;
+    justify-self: end;
+    display: flex;
+    gap: 0.8rem;
+}
+
+.people-score-box {
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    border-color: var(--gold) !important;
+}
+
+.people-score-box:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 20px rgba(255, 215, 0, 0.2) !important;
+}
+
+.people-score-box .score-label {
+    color: var(--gold);
+}
+
+@media (max-width: 768px) {
+    .detail-header-grid {
+        grid-template-areas:
+            "rank title"
+            "score score"
+            "date loc"
+            "desc desc";
+        justify-items: center;
+        text-align: center;
+    }
+
+    .scores-wrapper {
+        justify-self: center;
+        margin: 1rem 0;
+    }
+
+    .detail-score-box {
+        min-width: 100px;
+    }
+}
