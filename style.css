@@ -3,7 +3,7 @@
     --card-bg: #FFFFFF;
     --text-main: #111111;
     --text-muted: #555555;
-    --gold: #FFD700;
+    --gold: #FF9100;
     --silver: #C0C0C0;
     --bronze: #CD7F32;
     --accent: #000000;
@@ -60,7 +60,7 @@ body {
 #app {
     max-width: 900px;
     margin: 0 auto;
-    padding: 2rem 1.5rem;
+    padding: 1.5rem;
     min-height: 100vh;
     position: relative;
 }
@@ -794,6 +794,8 @@ input:checked+.slider:before {
     width: fit-content;
     border: 1px solid transparent;
     min-width: 80px;
+    height: 100%;
+    /* Match height with scores */
 }
 
 .dark-mode .detail-date-box {
@@ -845,10 +847,12 @@ input:checked+.slider:before {
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.8);
     border-radius: 12px;
-    padding: 0.5rem 1rem;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9);
     flex-shrink: 0;
     min-width: 80px;
+    height: 100%;
+    padding: 0.5rem;
+    /* Fill wrapper height */
 }
 
 .dark-mode .detail-score-box {
@@ -1065,7 +1069,7 @@ input:checked+.slider:before {
 /* ========== FOOTER ========== */
 
 .footer {
-    margin-top: 4rem;
+    margin-top: 1.5rem;
     padding: 0.8rem 2rem;
     text-align: center;
     border-radius: 14px;
@@ -1114,14 +1118,16 @@ input:checked+.slider:before {
 
     /* Detail Header Grid - Mobile */
     .detail-header-grid {
-        grid-template-columns: min-content 1fr auto;
+        grid-template-columns: auto 1fr;
         grid-template-areas:
-            "rank title title"
-            ".    date  score"
-            ".    loc   loc"
-            "desc desc  desc";
+            "rank title"
+            "date score"
+            "loc  loc"
+            "desc desc";
         row-gap: 0.8rem;
-        column-gap: 0.8rem;
+        column-gap: 0.5rem;
+        align-items: stretch;
+        /* Force equal height for Date and Score */
     }
 
     .detail-title {
@@ -1138,8 +1144,9 @@ input:checked+.slider:before {
     .detail-date-box {
         grid-area: date;
         justify-self: start;
-        padding: 0.3rem 0.8rem;
-        margin-left: -0.5rem;
+        padding: 0.3rem 0.6rem;
+        margin-left: 0;
+        height: 100%;
     }
 
     .detail-header-grid .score-label,
@@ -1158,12 +1165,34 @@ input:checked+.slider:before {
     .detail-score-box {
         grid-area: score;
         justify-self: end;
-        padding: 0.3rem 0.8rem;
+        height: 100%;
+        padding: 0.3rem;
+        min-width: 60px;
+        /* Allow shrinking slightly to fit row */
     }
 
-    .detail-description {
-        margin-top: 0.5rem;
-        font-size: 1rem;
+    .people-score-box {
+        border-color: var(--gold) !important;
+    }
+
+    .detail-header-grid .score-label {
+        font-size: 0.55rem;
+        white-space: normal;
+        /* Allow wrapping */
+        line-height: 1.1;
+        max-width: 70px;
+        /* Force wrap if too long */
+        text-align: center;
+        margin-bottom: 2px;
+    }
+
+    .detail-header-grid .date-label {
+        font-size: 0.55rem;
+        margin-bottom: 2px;
+    }
+
+    .detail-header-grid .score-value {
+        font-size: 1.1rem;
     }
 
     /* Ranking Cards - Mobile */
@@ -1341,7 +1370,9 @@ input:checked+.slider:before {
     grid-area: score;
     justify-self: end;
     display: flex;
-    gap: 0.8rem;
+    gap: 0.5rem;
+    height: 100%;
+    align-items: stretch;
 }
 
 .people-score-box {
@@ -1357,25 +1388,4 @@ input:checked+.slider:before {
 
 .people-score-box .score-label {
     color: var(--gold);
-}
-
-@media (max-width: 768px) {
-    .detail-header-grid {
-        grid-template-areas:
-            "rank title"
-            "score score"
-            "date loc"
-            "desc desc";
-        justify-items: center;
-        text-align: center;
-    }
-
-    .scores-wrapper {
-        justify-self: center;
-        margin: 1rem 0;
-    }
-
-    .detail-score-box {
-        min-width: 100px;
-    }
 }

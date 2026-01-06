@@ -524,10 +524,15 @@ function showDetail(res, updateHash = true) {
                     </div>
 
                     <!-- People's Score -->
-                    <div class="detail-score-box people-score-box" onclick="openSurveyModal()">
-                        <div class="score-label">Puntaje de la gente</div>
-                        <div class="score-value">${getPeopleScore(res.name)}</div>
-                    </div>
+                    ${(() => {
+            const pScore = getPeopleScore(res.name);
+            return (pScore && pScore !== '-.-') ? `
+                            <div class="detail-score-box people-score-box" onclick="openSurveyModal()">
+                                <div class="score-label">Puntaje de la gente</div>
+                                <div class="score-value">${pScore}</div>
+                            </div>
+                        ` : '';
+        })()}
                 </div>
 
                 <!-- Location -->
@@ -589,7 +594,7 @@ function showDetail(res, updateHash = true) {
         }
         </div>
         
-        <div class="detail-tabs-container" style="margin-top: 3rem;">
+        <div class="detail-tabs-container">
             <div class="sub-tabs">
                 <button class="sub-tab-btn active" data-subtab="fotos">Fotos</button>
                 <button class="sub-tab-btn" data-subtab="puntajes">Puntajes</button>
