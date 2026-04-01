@@ -2,6 +2,9 @@
  * Código para ser desplegado como Web App en Google Apps Script.
  * Administra las solicitudes GET (para obtener críticos y fechas)
  * y POST (para cargar reseñas) desde la página de Frontend.
+ *
+ * IMPORTANTE: Después de pegar este código, crear una NUEVA implementación
+ * (Desplegar > Nueva implementación) para que los cambios tomen efecto.
  */
 
 const SHEET_NAME = 'mainTable';
@@ -9,81 +12,95 @@ const SHEET_NAME = 'mainTable';
 /**
  * Responde a solicitudes HTTP GET.
  * Devuelve un JSON con: críticos, fechas, e información de restaurantes relacionada.
+ * Detecta columnas dinámicamente leyendo los headers de la Fila 1.
  */
 function doGet(e) {
   try {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
     if (!sheet) {
-        return ContentService.createTextOutput(JSON.stringify({ error: "No se encontró la pestaña " + SHEET_NAME }))
-          .setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(JSON.stringify({
+        error: "No se encontró la pestaña '" + SHEET_NAME + "'"
+      })).setMimeType(ContentService.MimeType.JSON);
     }
 
     var data = sheet.getDataRange().getValues();
     if (data.length === 0) {
-      return ContentService.createTextOutput(JSON.stringify({ error: "La pestaña está vacía" }))
-        .setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(JSON.stringify({
+        error: "La pestaña está vacía"
+      })).setMimeType(ContentService.MimeType.JSON);
     }
-    
+
     var headers = data[0];
-    
-    // 1. Extraer los nombres de Críticos
-    // El requerimiento dice que están en la Fila 1 a partir de la columna N (índice 13).
-    // Tomamos saltos de 5 columnas para encontrar al siguiente crítico.
+
+    // =============================================
+    // 1. Detectar columnas clave dinámicamente
+    // =============================================
+    var dateCol = -1;
+    var nameCol = -1;
+    var typeCol = -1;
+
+    for (var i = 0; i < headers.length; i++) {
+      var h = String(headers[i]).toLowerCase().trim();
+      if ((h === 'fecha' || h === 'date') && dateCol === -1) dateCol = i;
+      if ((h === 'name' || h === 'nombre') && nameCol === -1) nameCol = i;
+      if ((h === 'presencial delivery' || h === 'tipo' || h === 'type') && typeCol === -1) typeCol = i;
+    }
+
+    // =============================================
+    // 2. Encontrar críticos buscando headers " rating"
+    //    Esto es más robusto que saltar de a N columnas.
+    // =============================================
     var critics = [];
-    var criticsStartCol = 13; // Índice de columna N (0-based)
-    var columnasPorCritico = 5; 
-    
-    for (var i = criticsStartCol; i < headers.length; i += columnasPorCritico) {
-      // Remover " rating" del nombre si lo tiene
-      let rawName = headers[i];
-      if (rawName && typeof rawName === 'string' && rawName.trim() !== "") {
-          let cleanName = rawName.replace(/ rating$/i, '').trim();
-          critics.push({
-            name: cleanName,
-            colIndex: i + 1 // Para .getRange(), las columnas son 1-based
-          });
+    for (var i = 0; i < headers.length; i++) {
+      var h = String(headers[i]).toLowerCase().trim();
+      if (h.endsWith(' rating')) {
+        var criticName = h.replace(/ rating$/, '').trim();
+        // Capitalizar primera letra
+        criticName = criticName.charAt(0).toUpperCase() + criticName.slice(1);
+        critics.push({
+          name: criticName,
+          colIndex: i + 1  // 1-based para getRange()
+        });
       }
     }
-    
-    // 2. Extraer Restaurantes y Fechas
-    var restaurantsMapping = {}; 
-    var datesObj = {};
-    
-    // Iteramos desde la fila 2 en adelante
+
+    // =============================================
+    // 3. Construir mapeo Fecha -> Restaurantes
+    // =============================================
+    var datesSet = {};
+    var restaurantsByDate = {};
+
     for (var r = 1; r < data.length; r++) {
-      var fullRow = data[r];
-      var rawDate = fullRow[0]; // Columna A
-      var restaurant = fullRow[1]; // Columna B
-      var type = fullRow[2]; // Columna C (Presencial / Delivery)
-      
+      var row = data[r];
+      var rawDate = dateCol >= 0 ? row[dateCol] : '';
+      var restaurant = nameCol >= 0 ? row[nameCol] : '';
+      var type = typeCol >= 0 ? row[typeCol] : '';
+
       if (!rawDate || !restaurant) continue;
-      
-      // Formatear correctamente la fecha (si viene como objeto Date de GAS)
+
+      // Formatear fecha (GAS puede devolver objeto Date nativo)
       var dateStr = String(rawDate);
       if (rawDate instanceof Date) {
-         // Ajustar formato según como esté en la vista D/M/YYYY
-         dateStr = Utilities.formatDate(rawDate, Session.getScriptTimeZone(), "dd/MM/yyyy");
+        dateStr = Utilities.formatDate(rawDate, Session.getScriptTimeZone(), "dd/MM/yyyy");
       }
-      
-      datesObj[dateStr] = true;
-      if (!restaurantsMapping[dateStr]) {
-        restaurantsMapping[dateStr] = [];
+
+      datesSet[dateStr] = true;
+      if (!restaurantsByDate[dateStr]) {
+        restaurantsByDate[dateStr] = [];
       }
-      
-      restaurantsMapping[dateStr].push({
-        name: restaurant,
-        type: type,
-        rowIndex: r + 1 // Para .getRange(), las filas son 1-based
+
+      restaurantsByDate[dateStr].push({
+        name: String(restaurant),
+        type: String(type),
+        rowIndex: r + 1  // 1-based para getRange()
       });
     }
-    
-    var sortedDates = Object.keys(datesObj).sort(function(a, b){
-      // Intenta ordenar dd/mm/yyyy
-      var pa = a.split('/'); var pb = b.split('/');
-      if(pa.length === 3 && pb.length === 3) {
-         var da = new Date(pa[2], pa[1]-1, pa[0]);
-         var db = new Date(pb[2], pb[1]-1, pb[0]);
-         return da - db;
+
+    // Ordenar fechas cronológicamente
+    var sortedDates = Object.keys(datesSet).sort(function(a, b) {
+      var pa = a.split('/'), pb = b.split('/');
+      if (pa.length === 3 && pb.length === 3) {
+        return new Date(pa[2], pa[1] - 1, pa[0]) - new Date(pb[2], pb[1] - 1, pb[0]);
       }
       return 0;
     });
@@ -91,68 +108,84 @@ function doGet(e) {
     var response = {
       critics: critics,
       dates: sortedDates,
-      restaurantsByDate: restaurantsMapping
+      restaurantsByDate: restaurantsByDate,
+      // Debug: incluir los headers detectados para verificación
+      _debug: {
+        dateCol: dateCol,
+        nameCol: nameCol,
+        typeCol: typeCol,
+        totalHeaders: headers.length,
+        sampleHeaders: headers.slice(0, 20).map(function(h) { return String(h); })
+      }
     };
-    
+
     return ContentService.createTextOutput(JSON.stringify(response))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ error: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({
+      error: error.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
 /**
  * Responde a solicitudes HTTP POST.
- * Graba una reseña garantizando usar el bloque correcto.
+ * Graba una reseña garantizando usar el bloque correcto del crítico.
+ *
+ * Payload esperado:
+ * {
+ *   rowIndex: number (1-based),
+ *   colIndex: number (1-based, columna del " rating" del crítico),
+ *   criticName: string,
+ *   restaurantName: string,
+ *   type: "presencial" | "delivery",
+ *   values: { rating: number, comida: number, field2: number, field3: number }
+ * }
+ *
+ * El bloque por crítico es de 6 columnas:
+ * [rating, comida, lugar, atencion, presentacion, precio]
  */
 function doPost(e) {
   try {
     Logger.log("Recibido POST: " + e.postData.contents);
     var postData = JSON.parse(e.postData.contents);
-    
+
     var rowIndex = parseInt(postData.rowIndex);
     var colIndex = parseInt(postData.colIndex);
-    var targetValues = postData.values; // Formato esperado: [promedio, comida, lugar_o_presentacion, atencion_o_precio, ""]
-    
-    if (!rowIndex || !colIndex || !targetValues || !Array.isArray(targetValues)) {
-       throw new Error("Datos de envío inválidos o incompletos.");
-    }
+    var vals = postData.values;
+    var type = String(postData.type || '').toLowerCase();
 
-    if (targetValues.length < 5) {
-       // Rellenar si mandan menos campos.
-       while(targetValues.length < 5) targetValues.push("");
-    } else if (targetValues.length > 5) {
-       targetValues = targetValues.slice(0, 5); // Acotar a 5 exactos
+    if (!rowIndex || !colIndex || !vals) {
+      throw new Error("Datos de envío inválidos o incompletos.");
     }
 
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-    
-    // Escribe exactamente en 1 fila, arrancando en `colIndex` y a lo largo de 5 celdas a la derecha
-    var range = sheet.getRange(rowIndex, colIndex, 1, 5);
-    
-    // IMPORTANTE: setValue recibe un 2D array: [[val1, val2, ...]]
-    range.setValues([targetValues]);
-    
+
+    // Construir el array de 6 valores según el tipo
+    // Orden de columnas: [rating, comida, lugar, atencion, presentacion, precio]
+    var writeValues;
+    if (type === 'delivery') {
+      writeValues = [vals.rating, vals.comida, "", "", vals.field2, vals.field3];
+    } else {
+      // Presencial (por defecto)
+      writeValues = [vals.rating, vals.comida, vals.field2, vals.field3, "", ""];
+    }
+
+    // Escribir exactamente 6 celdas en el bloque del crítico
+    var range = sheet.getRange(rowIndex, colIndex, 1, 6);
+    range.setValues([writeValues]);
+
     return ContentService.createTextOutput(JSON.stringify({
-      success: true, 
-      message: "Reseña de " + postData.criticName + " guardada en " + postData.restaurantName
+      success: true,
+      message: "Reseña de " + postData.criticName + " guardada para " + postData.restaurantName
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
     Logger.log("Error en POST: " + error.toString());
     return ContentService.createTextOutput(JSON.stringify({
-      success: false, 
-      message: error.toString() 
+      success: false,
+      message: error.toString()
     })).setMimeType(ContentService.MimeType.JSON);
   }
-}
-
-/**
- * Permite manejar solicitudes OPTION si el navegador hace 'preflight' por temas de CORS
- */
-function doOptions(e) {
-  return ContentService.createTextOutput("")
-    .setMimeType(ContentService.MimeType.TEXT);
 }

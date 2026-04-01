@@ -1,7 +1,7 @@
 /**
  * REEMPLAZA ESTA URL CON TU URL DE DEPLOY DE GOOGLE APPS SCRIPT
  */
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxtDmXiZ6Wyr62IFdhTu-7D7G3wHS0FWiadNnxXi2RQ_DOZATN3_02Q6B916NPMxo7H/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxRCTZV4StErQ_tesloY3-JIpI_xjB2rtCz7kLi116NoY5D03mHDV22caUi5Hmh8sYj/exec';
 
 // --- Estado global ---
 let appData = {
@@ -9,6 +9,9 @@ let appData = {
     dates: [],
     restaurantsByDate: {}
 };
+
+// Tipo actual del restaurante seleccionado ('presencial' o 'delivery')
+let currentType = 'presencial';
 
 // --- Cache DOM ---
 const criticSelect = document.getElementById('critic-select');
@@ -30,18 +33,23 @@ const msgBox = document.getElementById('message-container');
 // Inputs de puntuación
 const inAvg = document.getElementById('score-avg');
 const in1 = document.getElementById('score-1'); // Comida (siempre)
-const in2 = document.getElementById('score-2'); // Lugar/Presentacion
-const in3 = document.getElementById('score-3'); // Atencion/Precio
+const in2 = document.getElementById('score-2'); // Lugar / Presentación
+const in3 = document.getElementById('score-3'); // Atención / Precio
 
-// Alargar inicialización
+// --- Inicialización ---
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
     if (SCRIPT_URL === 'AGREGA_AQUI_LA_URL_DE_TU_WEB_APP_APPS_SCRIPT') {
         statusText.textContent = "⚠ Atención: Falta configurar SCRIPT_URL en carga.js";
         statusText.style.color = "#e74c3c";
-        return; // Detenemos la carga si no está configurado
+        return;
     }
+
+    // Configurar auto-cálculo del promedio
+    in1.addEventListener('input', updateAverage);
+    in2.addEventListener('input', updateAverage);
+    in3.addEventListener('input', updateAverage);
 
     try {
         const res = await fetch(SCRIPT_URL);
@@ -50,7 +58,12 @@ async function init() {
         if (json.error) throw new Error(json.error);
 
         appData = json;
-        console.log("Datos cargados: ", appData);
+        console.log("Datos cargados:", appData);
+
+        // Mostrar info de debug si existe
+        if (json._debug) {
+            console.log("Debug - Columnas detectadas:", json._debug);
+        }
 
         populateCritics();
         populateDates();
@@ -62,17 +75,30 @@ async function init() {
         console.error("Error detallado al obtener datos:", error);
         statusText.textContent = `❌ Error: ${error.message || "No se pudo conectar con la base de datos"}.`;
         statusText.style.color = "#e74c3c";
-
-        // Sugerencia para el usuario en consola
-        console.warn("Sugerencias de depuración:\n1. Verifica que el script esté publicado como 'Cualquiera' (Anyone).\n2. Asegúrate de que el nombre de la pestaña en Google Sheets sea exactamente 'mainTable'.\n3. Revisa la consola de red (F12 > Network) para ver si hay bloqueos de CORS.");
+        console.warn("Sugerencias:\n1. Verifica que el script esté publicado como 'Cualquiera' (Anyone).\n2. Asegúrate de que la pestaña se llame 'mainTable'.\n3. Después de cambiar Code.gs, crea una NUEVA implementación.");
     }
 }
 
+// --- Auto-cálculo del promedio ---
+function updateAverage() {
+    const v1 = parseFloat(in1.value);
+    const v2 = parseFloat(in2.value);
+    const v3 = parseFloat(in3.value);
+
+    if (!isNaN(v1) && !isNaN(v2) && !isNaN(v3)) {
+        const avg = (v1 + v2 + v3) / 3;
+        inAvg.value = avg.toFixed(2);
+    } else {
+        inAvg.value = '';
+    }
+}
+
+// --- Poblar selectores ---
 function populateCritics() {
     criticSelect.innerHTML = '<option value="" disabled selected>Elegí tu nombre</option>';
     appData.critics.forEach(c => {
         const opt = document.createElement('option');
-        opt.value = c.colIndex;      // Grabamos la columna en el value
+        opt.value = c.colIndex;
         opt.textContent = c.name;
         opt.dataset.name = c.name;
         criticSelect.appendChild(opt);
@@ -91,104 +117,115 @@ function populateDates() {
     dateSelect.disabled = false;
 }
 
-// Escuchar cambios de fecha para poblar restaurantes
+// --- Evento: Cambio de fecha → poblar restaurantes ---
 dateSelect.addEventListener('change', (e) => {
     const selectedDate = e.target.value;
     const restaurants = appData.restaurantsByDate[selectedDate] || [];
 
-    restSelect.innerHTML = '<option value="" disabled selected>Elegí el lugar o pedir a...</option>';
+    restSelect.innerHTML = '<option value="" disabled selected>Elegí el restaurante</option>';
 
     restaurants.forEach(r => {
         const opt = document.createElement('option');
-        opt.value = String(r.rowIndex); // Enviamos el row index en el value
+        opt.value = String(r.rowIndex);
         opt.textContent = r.name;
-        opt.dataset.type = r.type;      // Guardamos el tipo (Presencial o Delivery)
+        opt.dataset.type = r.type;
         opt.dataset.name = r.name;
         restSelect.appendChild(opt);
     });
 
     restSelect.disabled = false;
-    fieldContainer.classList.remove('show'); // Ocultar si cambia fecha
+    fieldContainer.classList.remove('show');
+    fieldContainer.style.display = 'none';
     badgeType.style.display = 'none';
 });
 
-// Escuchar cambios de restaurante para mostrar labels dinámicas
+// --- Evento: Cambio de restaurante → mostrar campos dinámicos ---
 restSelect.addEventListener('change', (e) => {
     const selectedOpt = e.target.selectedOptions[0];
     if (!selectedOpt) return;
 
-    const rawType = selectedOpt.dataset.type || '';
-    const upperType = rawType.toUpperCase();
+    const rawType = (selectedOpt.dataset.type || '').toUpperCase().trim();
 
-    // Asumir Presencial por defecto si no estipula claramente lo contrario
-    const isDelivery = upperType.includes('D') || upperType.includes('L'); // "D" o "Delivery" o "Local"
+    // Determinar si es Delivery: buscamos "D" o "DELIVERY"
+    // Presencial: "P" o "PRESENCIAL"
+    const isDelivery = rawType === 'D' || rawType === 'DELIVERY';
+    currentType = isDelivery ? 'delivery' : 'presencial';
 
     if (isDelivery) {
         labelScore2.textContent = "Presentación";
         iconScore2.setAttribute('data-lucide', 'package');
-
         labelScore3.textContent = "Precio";
         iconScore3.setAttribute('data-lucide', 'dollar-sign');
-
-        badgeType.textContent = "Modalidad: Delivery";
+        badgeType.textContent = "📦 Modalidad: Delivery";
     } else {
         labelScore2.textContent = "Lugar";
         iconScore2.setAttribute('data-lucide', 'armchair');
-
         labelScore3.textContent = "Atención";
         iconScore3.setAttribute('data-lucide', 'smile');
-
-        badgeType.textContent = "Modalidad: Presencial";
+        badgeType.textContent = "🍽️ Modalidad: Presencial";
     }
 
     badgeType.style.display = 'block';
-
-    // Re-render strings to SVG
     lucide.createIcons();
 
-    // Resetear valor de los text boxes (opcional)
+    // Limpiar inputs
     inAvg.value = '';
     in1.value = '';
     in2.value = '';
     in3.value = '';
 
-    // Mostrar sección
+    // Mostrar sección con animación
     fieldContainer.style.display = 'block';
-
-    // trigger reflow para dar espacio a la animación
-    void fieldContainer.offsetWidth;
+    void fieldContainer.offsetWidth; // trigger reflow
     fieldContainer.classList.add('show');
 });
 
-// Submit del formulario
+// --- Submit ---
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const criticOpt = criticSelect.selectedOptions[0];
     const restOpt = restSelect.selectedOptions[0];
 
-    const colIndex = criticOpt.value;
+    if (!criticOpt || !criticOpt.value || !restOpt || !restOpt.value) {
+        msgBox.textContent = "Por favor completá todos los campos.";
+        msgBox.className = "message-box error";
+        return;
+    }
+
+    const colIndex = parseInt(criticOpt.value);
     const criticName = criticOpt.dataset.name;
-    const rowIndex = restOpt.value;
+    const rowIndex = parseInt(restOpt.value);
     const restName = restOpt.dataset.name;
 
-    const avg = parseFloat(inAvg.value);
-    const var1 = parseFloat(in1.value);
-    const var2 = parseFloat(in2.value);
-    const var3 = parseFloat(in3.value);
+    const comida = parseFloat(in1.value);
+    const field2 = parseFloat(in2.value);
+    const field3 = parseFloat(in3.value);
 
-    // Creamos payload
+    if (isNaN(comida) || isNaN(field2) || isNaN(field3)) {
+        msgBox.textContent = "Todos los puntajes son obligatorios.";
+        msgBox.className = "message-box error";
+        return;
+    }
+
+    const avg = parseFloat(((comida + field2 + field3) / 3).toFixed(2));
+
     const payload = {
-        rowIndex: parseInt(rowIndex),
-        colIndex: parseInt(colIndex),
+        rowIndex: rowIndex,
+        colIndex: colIndex,
         criticName: criticName,
         restaurantName: restName,
-        // El array es de 5 campos. El 5to lo dejamos vacío por convención de espacios.
-        values: [avg, var1, var2, var3, ""]
+        type: currentType,
+        values: {
+            rating: avg,
+            comida: comida,
+            field2: field2,
+            field3: field3
+        }
     };
 
     // UI Loading
-    msgBox.className = "message-box"; // reset
+    msgBox.className = "message-box";
     msgBox.style.display = "none";
     btnSubmit.disabled = true;
     btnSubmit.classList.add('loading');
@@ -197,27 +234,26 @@ form.addEventListener('submit', async (e) => {
         const response = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify(payload)
-            // No enviar Content-Type application/json porque dispara preflight requests de CORS muy restrictivos en GAS
-            // fetch toma DOMString por defecto y envía plain/text lo cual GAS acepta en doPost()
         });
 
         const result = await response.json();
 
         if (result.success) {
-            msgBox.textContent = result.message || "¡Reseña subida con éxito!";
-            msgBox.classList.add('success');
-            // Podríamos deshabilitar los selects temporalmente hasta q el usuario refresque,
-            // o limpiar el formulario:
-            inAvg.value = ''; in1.value = ''; in2.value = ''; in3.value = '';
+            msgBox.textContent = `✅ ${result.message || "¡Reseña subida con éxito!"}`;
+            msgBox.className = "message-box success";
+            inAvg.value = '';
+            in1.value = '';
+            in2.value = '';
+            in3.value = '';
         } else {
             msgBox.textContent = result.message || "Error al subir la reseña.";
-            msgBox.classList.add('error');
+            msgBox.className = "message-box error";
         }
 
     } catch (error) {
         msgBox.textContent = "Error de red: " + error.message;
-        msgBox.classList.add('error');
-        console.error("Fetch POST Error: ", error);
+        msgBox.className = "message-box error";
+        console.error("Fetch POST Error:", error);
     } finally {
         btnSubmit.disabled = false;
         btnSubmit.classList.remove('loading');
