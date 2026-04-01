@@ -147,11 +147,11 @@ function fetchData() {
             }
         } else {
             console.warn("Invalid or empty data, using MOCK_DATA");
-            allRestaurants = MOCK_DATA.map(m => ({...m, presencialDelivery: 'P', critics: {}}));
+            allRestaurants = MOCK_DATA.map(m => ({ ...m, presencialDelivery: 'P', critics: {} }));
         }
 
         console.log("Datos cargados:", { mode: currentMode, allRestaurants, peopleScores });
-        
+
         // Filter by the current mode immediately
         filterByMode();
 
@@ -159,7 +159,7 @@ function fetchData() {
         handleHashChange();
     }).catch(err => {
         console.error("Error loading data:", err);
-        allRestaurants = MOCK_DATA.map(m => ({...m, presencialDelivery: 'P', critics: {}}));
+        allRestaurants = MOCK_DATA.map(m => ({ ...m, presencialDelivery: 'P', critics: {} }));
         filterByMode();
 
         // Handle hash navigation even with mock data
