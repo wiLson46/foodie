@@ -1,27 +1,13 @@
 
 // --- CONFIG & DATA ---
 const CONFIG = {
-    presencial: {
-        main: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv',
-        critics: {
-            wil: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=667637220',
-            fer: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=445878910',
-            colo: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1592300088',
-            andy: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1438813672'
-        },
-        tabs: ['ranking', 'map']
-    },
-    delivery: {
-        main: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=2117542404',
-        critics: {
-            wil: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1858951681'
-            // Add more critics here when available
-        },
-        tabs: ['ranking']
+    mainDataSheet: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv',
+    peopleScoreSheet: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1841885372',
+    tabsData: {
+        presencial: ['ranking', 'map'],
+        delivery: ['ranking']
     }
 };
-
-const PEOPLE_SCORE_SHEET = 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1841885372';
 
 const MOCK_DATA = [
     { rank: 1, name: "Pujol", rating: "9.8", description: "Cocina mexicana de autor en las manos de Enrique Olvera.", location: "CDMX, México" },
@@ -31,9 +17,9 @@ const MOCK_DATA = [
 ];
 
 // --- APP STATE ---
-let restaurants = [];
-let filteredRestaurants = [];
-let criticsData = { wil: [], fer: [], colo: [], andy: [] }; // This will be dynamic based on mode
+let allRestaurants = []; // Stores all fetched restaurants
+let restaurants = []; // Restaurants filtered by currentMode
+let filteredRestaurants = []; // Restaurants filtered by both mode and location
 let peopleScores = []; // New state for people's scores
 let currentSort = 'score'; // Default sort order
 let currentMode = 'presencial'; // 'presencial' | 'delivery'
@@ -94,29 +80,12 @@ function fetchSheet(url) {
 }
 
 /**
- * Fetches all critics data and main data
+ * Fetches all data once and initializes the view
  */
-function fetchCriticsData() {
-    const config = CONFIG[currentMode];
-
-    // Reset critics data structure
-    criticsData = {};
-    const criticsPromises = [];
-    const criticsKeys = Object.keys(config.critics);
-
-    criticsKeys.forEach(key => {
-        criticsPromises.push(
-            fetchSheet(config.critics[key]).then(data => {
-                criticsData[key] = data;
-                return data;
-            })
-        );
-    });
-
+function fetchData() {
     const promises = [
-        fetchSheet(config.main),
-        ...criticsPromises,
-        fetchSheet(PEOPLE_SCORE_SHEET) // Fetch people scores
+        fetchSheet(CONFIG.mainDataSheet),
+        fetchSheet(CONFIG.peopleScoreSheet)
     ];
 
     // Show loading state
@@ -124,8 +93,7 @@ function fetchCriticsData() {
 
     Promise.all(promises).then(results => {
         const mainData = results[0];
-        // People scores are the last result
-        const peopleData = results[results.length - 1];
+        const peopleData = results[1];
 
         // Parse people scores
         if (isValidData(peopleData)) {
@@ -140,41 +108,79 @@ function fetchCriticsData() {
         if (isValidData(mainData)) {
             const hasName = Object.keys(mainData[0]).some(k => k === 'name' || k === 'nombre');
             if (hasName) {
-                restaurants = mainData.map((r, index) => ({
-                    ...r,
-                    name: r.name || r.nombre,
-                    rating: r.rating || r.promedio || r.score || '0',
-                    rank: index + 1,
-                    description: r.description || r.descripcion || '',
-                    orderedBy: r['pedido por'] || r.pedido_por || ''
-                }));
+                // Determine critics from headers
+                const firstRowKeys = Object.keys(mainData[0]);
+                const criticNames = firstRowKeys
+                    .filter(k => k.endsWith(' rating'))
+                    .map(k => k.replace(' rating', '').trim());
+
+                allRestaurants = mainData.map((r, index) => {
+                    // Extract critics data for this restaurant
+                    const critics = {};
+                    criticNames.forEach(critic => {
+                        if (r[`${critic} rating`]) {
+                            critics[critic] = {
+                                rating: r[`${critic} rating`],
+                                comida: r[`${critic} comida`],
+                                lugar: r[`${critic} lugar`],
+                                atencion: r[`${critic} atencion`],
+                                presentacion: r[`${critic} presentacion`],
+                                precio: r[`${critic} precio`]
+                            };
+                        }
+                    });
+
+                    return {
+                        ...r,
+                        name: r.name || r.nombre,
+                        rating: r.rating || r.promedio || r.score || '0',
+                        rank: r.ranking || r.rank || index + 1, // Use ranking from data
+                        description: r.description || r.descripcion || '',
+                        orderedBy: r['pedido por'] || r.pedido_por || '',
+                        presencialDelivery: (r['presencial delivery'] || '').toUpperCase(),
+                        critics: critics
+                    };
+                });
             } else {
                 console.warn("No 'name' column found, using MOCK_DATA");
-                restaurants = MOCK_DATA;
+                allRestaurants = MOCK_DATA.map(m => ({ ...m, presencialDelivery: 'P', critics: {} }));
             }
         } else {
             console.warn("Invalid or empty data, using MOCK_DATA");
-            restaurants = MOCK_DATA;
+            allRestaurants = MOCK_DATA.map(m => ({...m, presencialDelivery: 'P', critics: {}}));
         }
 
-        console.log("Datos cargados:", { mode: currentMode, restaurants, criticsData, peopleScores });
-        filteredRestaurants = [...restaurants];
-        populateLocationFilter();
-        applySort(); // Apply initial sort
-        renderRanking();
+        console.log("Datos cargados:", { mode: currentMode, allRestaurants, peopleScores });
+        
+        // Filter by the current mode immediately
+        filterByMode();
 
         // Handle hash navigation after data is loaded
         handleHashChange();
     }).catch(err => {
         console.error("Error loading data:", err);
-        restaurants = MOCK_DATA;
-        filteredRestaurants = [...restaurants];
-        populateLocationFilter();
-        renderRanking();
+        allRestaurants = MOCK_DATA.map(m => ({...m, presencialDelivery: 'P', critics: {}}));
+        filterByMode();
 
         // Handle hash navigation even with mock data
         handleHashChange();
     });
+}
+
+/**
+ * Filters the master list by the current mode (presencial vs delivery)
+ */
+function filterByMode() {
+    if (currentMode === 'presencial') {
+        restaurants = allRestaurants.filter(r => r.presencialDelivery === 'P');
+    } else {
+        restaurants = allRestaurants.filter(r => r.presencialDelivery === 'D' || r.presencialDelivery === 'L');
+    }
+
+    filteredRestaurants = [...restaurants];
+    populateLocationFilter();
+    applySort(); // Apply sort resets filteredRestaurants based on new set
+    renderRanking();
 }
 
 /**
@@ -311,35 +317,6 @@ function renderRanking() {
 // --- DETAIL VIEW HELPERS ---
 
 /**
- * Finds photos for a restaurant from critics data
- */
-function findPhotosForRestaurant(restaurantName, mainPhotos) {
-    if (mainPhotos && mainPhotos.trim()) {
-        return mainPhotos;
-    }
-
-    // Search in all critics' data
-    // Search in all critics' data
-    const criticNames = Object.keys(criticsData);
-    for (const critic of criticNames) {
-        const data = criticsData[critic] || [];
-        const criticRes = data.find(r =>
-            (r.nombre && r.nombre.toLowerCase().trim() === restaurantName.toLowerCase().trim()) ||
-            (r.name && r.name.toLowerCase().trim() === restaurantName.toLowerCase().trim())
-        );
-
-        if (criticRes) {
-            const criticPhotos = criticRes.fotos || criticRes.images || criticRes.photos;
-            if (criticPhotos && criticPhotos.trim()) {
-                console.log(`Fotos encontradas en pestaña de ${critic}`);
-                return criticPhotos;
-            }
-        }
-    }
-    return '';
-}
-
-/**
  * Generates photos gallery HTML
  */
 function generatePhotosGalleryHTML(photosString) {
@@ -364,56 +341,45 @@ function generatePhotosGalleryHTML(photosString) {
 /**
  * Generates scores table HTML
  */
-function generateScoresTableHTML(restaurantName) {
-    const criticNames = Object.keys(criticsData);
-    let rowsHtml = '';
-    let hasData = false;
-
-    criticNames.forEach(critic => {
-        const data = criticsData[critic] || [];
-        const criticRes = data.find(r =>
-            (r.nombre && r.nombre.toLowerCase().trim() === restaurantName.toLowerCase().trim()) ||
-            (r.name && r.name.toLowerCase().trim() === restaurantName.toLowerCase().trim())
-        );
-
-        if (criticRes) {
-            hasData = true;
-            const isDelivery = currentMode === 'delivery';
-            const avg = criticRes.promedio || criticRes.average || criticRes.rating || '-';
-            const food = criticRes.comida || criticRes.food || '-';
-
-            let col3, col4;
-            if (isDelivery) {
-                // Delivery columns: Envio, Precio
-                col3 = criticRes.envio || criticRes['envio'] || '-';
-                col4 = criticRes.precio || criticRes.price || '-';
-            } else {
-                // Presencial columns: Lugar, Atencion
-                col3 = criticRes.lugar || criticRes.place || criticRes.ambience || '-';
-                col4 = criticRes.atencion || criticRes.service || '-';
-            }
-
-            rowsHtml += `
-                <tr class="score-row">
-                    <td class="col-critic">${critic}</td>
-                    <td class="col-score col-avg">${avg}</td>
-                    <td class="col-score">${food}</td>
-                    <td class="col-score">${col3}</td>
-                    <td class="col-score">${col4}</td>
-                </tr>
-            `;
-        }
-    });
-
-    const isDelivery = currentMode === 'delivery';
-
-    if (!hasData) {
+function generateScoresTableHTML(res) {
+    if (!res.critics || Object.keys(res.critics).length === 0) {
         return `
             <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
                 <p style="font-size: 0.9rem;">No hay detalles de puntajes para este lugar.</p>
             </div>
         `;
     }
+
+    const criticNames = Object.keys(res.critics);
+    let rowsHtml = '';
+    const isDelivery = currentMode === 'delivery';
+
+    criticNames.forEach(critic => {
+        const criticRes = res.critics[critic];
+        const avg = criticRes.rating || '-';
+        const food = criticRes.comida || '-';
+
+        let col3, col4;
+        if (isDelivery) {
+            // Delivery columns: Presentacion, Precio
+            col3 = criticRes.presentacion || '-';
+            col4 = criticRes.precio || '-';
+        } else {
+            // Presencial columns: Lugar, Atencion
+            col3 = criticRes.lugar || '-';
+            col4 = criticRes.atencion || '-';
+        }
+
+        rowsHtml += `
+            <tr class="score-row">
+                <td class="col-critic">${critic}</td>
+                <td class="col-score col-avg">${avg}</td>
+                <td class="col-score">${food}</td>
+                <td class="col-score">${col3}</td>
+                <td class="col-score">${col4}</td>
+            </tr>
+        `;
+    });
 
     return `
         <table class="scores-table">
@@ -423,7 +389,7 @@ function generateScoresTableHTML(restaurantName) {
                     <th>Prom.</th>
                     <th><i data-lucide="utensils" class="header-icon"></i> Comida</th>
                     ${isDelivery ?
-            `<th><i data-lucide="bike" class="header-icon"></i> Envío</th>
+            `<th><i data-lucide="box" class="header-icon"></i> Presentación</th>
                      <th><i data-lucide="dollar-sign" class="header-icon"></i> Precio</th>` :
             `<th><i data-lucide="armchair" class="header-icon"></i> Lugar</th>
                      <th><i data-lucide="thumbs-up" class="header-icon"></i> Atención</th>`
@@ -441,7 +407,8 @@ function generateScoresTableHTML(restaurantName) {
  * Converts restaurant name to URL-safe slug
  */
 function getRestaurantSlug(name) {
-    return name.toLowerCase()
+    if (!name) return '';
+    return String(name).toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9]+/g, '-')
@@ -479,7 +446,11 @@ function showDetail(res, updateHash = true) {
     // Update URL hash if needed
     if (updateHash) {
         const slug = getRestaurantSlug(res.name);
-        window.location.hash = `restaurant/${slug}`;
+        const expectedHash = `#restaurant/${slug}`;
+        if (window.location.hash !== expectedHash) {
+            window.location.hash = expectedHash;
+            return; // Let the hashchange event listener handle the actual rendering
+        }
     }
 
     const visitDate = res.date || res.fecha || '';
@@ -497,8 +468,7 @@ function showDetail(res, updateHash = true) {
     const instagramLink = instagram ? `https://instagram.com/${instagram.replace('@', '').replace('https://instagram.com/', '')}` : '';
 
     // Find photos
-    const mainPhotos = res.fotos || res.images || res.photos || '';
-    const photosString = findPhotosForRestaurant(res.name, mainPhotos);
+    const photosString = res.fotos || res.images || res.photos || '';
 
     restaurantContent.innerHTML = `
         <div class="detail-header">
@@ -701,7 +671,7 @@ function showDetail(res, updateHash = true) {
                     }
                 </style>
                 <div class="scores-table-container">
-                    ${generateScoresTableHTML(res.name)}
+                    ${generateScoresTableHTML(res)}
                 </div>
             </div>
         </div>
@@ -880,82 +850,7 @@ window.closeSurveyModal = function () {
     }, 300);
 };
 
-// --- INITIALIZATION ---
-
-function initApp() {
-    // Cache DOM elements
-    cacheDOMElements();
-
-    // Mode Switcher
-    setupModeSwitcher();
-
-    // Filters
-    setupFilters();
-
-    // Event Listeners
-    if (settingsBtn) {
-        settingsBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            settingsMenu.classList.toggle('hidden');
-        });
-    }
-
-    if (backBtn) {
-        backBtn.addEventListener('click', () => toggleHome());
-    }
-
-    if (darkModeToggle) {
-        // Check system preference
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            darkModeToggle.checked = true;
-            document.body.className = 'dark-mode';
-        }
-
-        darkModeToggle.addEventListener('change', () => {
-            document.body.className = darkModeToggle.checked ? 'dark-mode' : 'light-mode';
-        });
-    }
-
-    document.addEventListener('click', (e) => {
-        if (settingsMenu && !settingsMenu.classList.contains('hidden') && !e.target.closest('.dropdown')) {
-            settingsMenu.classList.add('hidden');
-        }
-    });
-
-    // Lightbox events
-    if (lightboxClose) {
-        lightboxClose.addEventListener('click', closeLightbox);
-    }
-
-    if (lightbox) {
-        lightbox.addEventListener('click', (e) => {
-            if (e.target === lightbox) closeLightbox();
-        });
-    }
-
-    // Survey Modal events
-    const surveyClose = document.getElementById('survey-close');
-    const surveyModal = document.getElementById('survey-modal');
-
-    if (surveyClose) {
-        surveyClose.addEventListener('click', closeSurveyModal);
-    }
-
-    if (surveyModal) {
-        surveyModal.addEventListener('click', (e) => {
-            if (e.target === surveyModal) closeSurveyModal();
-        });
-    }
-
-    // Tabs
-    setupMainTabs();
-
-    // Initial Data Fetch
-    fetchCriticsData();
-}
-
-// Start App
-document.addEventListener('DOMContentLoaded', initApp);
+// Removed duplicated initApp and DOMContentLoaded handler
 
 /**
  * Sets up lightbox event listeners
@@ -1055,11 +950,11 @@ function setupModeSwitcher() {
             btn.classList.add('active');
 
             // Handle Tabs visibility based on mode
-            const config = CONFIG[currentMode];
+            const activeTabsForMode = CONFIG.tabsData[currentMode] || ['ranking'];
             const tabs = document.querySelectorAll('.tab-btn');
             tabs.forEach(tab => {
                 const tabId = tab.getAttribute('data-tab');
-                if (config.tabs.includes(tabId)) {
+                if (activeTabsForMode.includes(tabId)) {
                     tab.style.display = 'flex';
                 } else {
                     tab.style.display = 'none';
@@ -1073,12 +968,8 @@ function setupModeSwitcher() {
                 document.querySelector('.tab-btn[data-tab="ranking"]').click();
             }
 
-            // Clear existing data and re-fetch
-            restaurants = [];
-            filteredRestaurants = [];
-            rankingList.innerHTML = '<div class="loader">Cargando nueva selección...</div>';
-
-            fetchCriticsData();
+            // Filter existing data without re-fetching
+            filterByMode();
         });
     });
 }
@@ -1116,7 +1007,7 @@ function initApp() {
     }, 100);
 
     // Fetch data
-    fetchCriticsData();
+    fetchData();
 }
 
 // Single DOMContentLoaded listener
