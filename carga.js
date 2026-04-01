@@ -1,7 +1,7 @@
 /**
- * REEMPLAZA ESTA URL CON TU URL DE DEPLOY DE GOOGLE APPS SCRIPT
+ * URL del Web App de Google Apps Script
  */
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxRCTZV4StErQ_tesloY3-JIpI_xjB2rtCz7kLi116NoY5D03mHDV22caUi5Hmh8sYj/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw36jX3H8Ifc2rp7-ZtRROfmbApIbQMe3ZuKjnbXLArJj07kZGSDMWu3veRHPJ-TkGT/exec';
 
 // --- Estado global ---
 let appData = {
@@ -10,7 +10,6 @@ let appData = {
     restaurantsByDate: {}
 };
 
-// Tipo actual del restaurante seleccionado ('presencial' o 'delivery')
 let currentType = 'presencial';
 
 // --- Cache DOM ---
@@ -28,11 +27,18 @@ const iconScore3 = document.getElementById('icon-score-3');
 const statusText = document.getElementById('status-text');
 const form = document.getElementById('review-form');
 const btnSubmit = document.getElementById('submit-btn');
-const msgBox = document.getElementById('message-container');
+
+// Modal de resultado
+const resultModal = document.getElementById('result-modal');
+const resultIconSuccess = document.getElementById('result-icon-success');
+const resultIconError = document.getElementById('result-icon-error');
+const resultTitle = document.getElementById('result-title');
+const resultMessage = document.getElementById('result-message');
+const resultBtn = document.getElementById('result-btn');
 
 // Inputs de puntuación
 const inAvg = document.getElementById('score-avg');
-const in1 = document.getElementById('score-1'); // Comida (siempre)
+const in1 = document.getElementById('score-1'); // Comida
 const in2 = document.getElementById('score-2'); // Lugar / Presentación
 const in3 = document.getElementById('score-3'); // Atención / Precio
 
@@ -46,10 +52,13 @@ async function init() {
         return;
     }
 
-    // Configurar auto-cálculo del promedio
+    // Auto-cálculo del promedio
     in1.addEventListener('input', updateAverage);
     in2.addEventListener('input', updateAverage);
     in3.addEventListener('input', updateAverage);
+
+    // Botón del modal para resetear
+    resultBtn.addEventListener('click', resetForm);
 
     try {
         const res = await fetch(SCRIPT_URL);
@@ -59,23 +68,18 @@ async function init() {
 
         appData = json;
         console.log("Datos cargados:", appData);
-
-        // Mostrar info de debug si existe
-        if (json._debug) {
-            console.log("Debug - Columnas detectadas:", json._debug);
-        }
+        if (json._debug) console.log("Debug columnas:", json._debug);
 
         populateCritics();
         populateDates();
 
-        statusText.textContent = "Datos sincronizados correctamente con Google Sheets.";
+        statusText.textContent = "Datos sincronizados correctamente.";
         statusText.style.color = "#2ecc71";
 
     } catch (error) {
-        console.error("Error detallado al obtener datos:", error);
-        statusText.textContent = `❌ Error: ${error.message || "No se pudo conectar con la base de datos"}.`;
+        console.error("Error:", error);
+        statusText.textContent = `❌ Error: ${error.message || "No se pudo conectar"}.`;
         statusText.style.color = "#e74c3c";
-        console.warn("Sugerencias:\n1. Verifica que el script esté publicado como 'Cualquiera' (Anyone).\n2. Asegúrate de que la pestaña se llame 'mainTable'.\n3. Después de cambiar Code.gs, crea una NUEVA implementación.");
     }
 }
 
@@ -86,8 +90,7 @@ function updateAverage() {
     const v3 = parseFloat(in3.value);
 
     if (!isNaN(v1) && !isNaN(v2) && !isNaN(v3)) {
-        const avg = (v1 + v2 + v3) / 3;
-        inAvg.value = avg.toFixed(2);
+        inAvg.value = ((v1 + v2 + v3) / 3).toFixed(2);
     } else {
         inAvg.value = '';
     }
@@ -107,7 +110,7 @@ function populateCritics() {
 }
 
 function populateDates() {
-    dateSelect.innerHTML = '<option value="" disabled selected>Elegí la fecha de la juntada</option>';
+    dateSelect.innerHTML = '<option value="" disabled selected>Elegí la fecha</option>';
     appData.dates.forEach(d => {
         const opt = document.createElement('option');
         opt.value = d;
@@ -117,7 +120,7 @@ function populateDates() {
     dateSelect.disabled = false;
 }
 
-// --- Evento: Cambio de fecha → poblar restaurantes ---
+// --- Cambio de fecha → poblar restaurantes ---
 dateSelect.addEventListener('change', (e) => {
     const selectedDate = e.target.value;
     const restaurants = appData.restaurantsByDate[selectedDate] || [];
@@ -139,16 +142,13 @@ dateSelect.addEventListener('change', (e) => {
     badgeType.style.display = 'none';
 });
 
-// --- Evento: Cambio de restaurante → mostrar campos dinámicos ---
+// --- Cambio de restaurante → mostrar campos dinámicos ---
 restSelect.addEventListener('change', (e) => {
     const selectedOpt = e.target.selectedOptions[0];
     if (!selectedOpt) return;
 
     const rawType = (selectedOpt.dataset.type || '').toUpperCase().trim();
-
-    // Determinar si es Delivery: buscamos "D" o "DELIVERY"
-    // Presencial: "P" o "PRESENCIAL"
-    const isDelivery = rawType === 'D' || rawType === 'DELIVERY';
+    const isDelivery = rawType === 'D' || rawType === 'DELIVERY' || rawType === 'L';
     currentType = isDelivery ? 'delivery' : 'presencial';
 
     if (isDelivery) {
@@ -168,15 +168,13 @@ restSelect.addEventListener('change', (e) => {
     badgeType.style.display = 'block';
     lucide.createIcons();
 
-    // Limpiar inputs
     inAvg.value = '';
     in1.value = '';
     in2.value = '';
     in3.value = '';
 
-    // Mostrar sección con animación
     fieldContainer.style.display = 'block';
-    void fieldContainer.offsetWidth; // trigger reflow
+    void fieldContainer.offsetWidth;
     fieldContainer.classList.add('show');
 });
 
@@ -187,46 +185,30 @@ form.addEventListener('submit', async (e) => {
     const criticOpt = criticSelect.selectedOptions[0];
     const restOpt = restSelect.selectedOptions[0];
 
-    if (!criticOpt || !criticOpt.value || !restOpt || !restOpt.value) {
-        msgBox.textContent = "Por favor completá todos los campos.";
-        msgBox.className = "message-box error";
-        return;
-    }
-
-    const colIndex = parseInt(criticOpt.value);
-    const criticName = criticOpt.dataset.name;
-    const rowIndex = parseInt(restOpt.value);
-    const restName = restOpt.dataset.name;
+    if (!criticOpt || !criticOpt.value || !restOpt || !restOpt.value) return;
 
     const comida = parseFloat(in1.value);
     const field2 = parseFloat(in2.value);
     const field3 = parseFloat(in3.value);
 
     if (isNaN(comida) || isNaN(field2) || isNaN(field3)) {
-        msgBox.textContent = "Todos los puntajes son obligatorios.";
-        msgBox.className = "message-box error";
+        showResult(false, "Campos incompletos", "Todos los puntajes son obligatorios.");
         return;
     }
 
-    const avg = parseFloat(((comida + field2 + field3) / 3).toFixed(2));
-
     const payload = {
-        rowIndex: rowIndex,
-        colIndex: colIndex,
-        criticName: criticName,
-        restaurantName: restName,
+        rowIndex: parseInt(restOpt.value),
+        colIndex: parseInt(criticOpt.value),
+        criticName: criticOpt.dataset.name,
+        restaurantName: restOpt.dataset.name,
         type: currentType,
         values: {
-            rating: avg,
             comida: comida,
             field2: field2,
             field3: field3
         }
     };
 
-    // UI Loading
-    msgBox.className = "message-box";
-    msgBox.style.display = "none";
     btnSubmit.disabled = true;
     btnSubmit.classList.add('loading');
 
@@ -239,23 +221,45 @@ form.addEventListener('submit', async (e) => {
         const result = await response.json();
 
         if (result.success) {
-            msgBox.textContent = `✅ ${result.message || "¡Reseña subida con éxito!"}`;
-            msgBox.className = "message-box success";
-            inAvg.value = '';
-            in1.value = '';
-            in2.value = '';
-            in3.value = '';
+            showResult(true, "¡Reseña cargada!", result.message || "Los datos fueron guardados correctamente.");
         } else {
-            msgBox.textContent = result.message || "Error al subir la reseña.";
-            msgBox.className = "message-box error";
+            showResult(false, "Error al guardar", result.message || "Ocurrió un problema al guardar la reseña.");
         }
 
     } catch (error) {
-        msgBox.textContent = "Error de red: " + error.message;
-        msgBox.className = "message-box error";
+        showResult(false, "Error de conexión", error.message);
         console.error("Fetch POST Error:", error);
     } finally {
         btnSubmit.disabled = false;
         btnSubmit.classList.remove('loading');
     }
 });
+
+// --- Modal de resultado ---
+function showResult(success, title, message) {
+    resultIconSuccess.style.display = success ? 'flex' : 'none';
+    resultIconError.style.display = success ? 'none' : 'flex';
+    resultTitle.textContent = title;
+    resultMessage.textContent = message;
+    resultBtn.textContent = success ? "Cargar otra reseña" : "Volver a intentar";
+    resultModal.classList.remove('hidden');
+}
+
+function resetForm() {
+    resultModal.classList.add('hidden');
+
+    // Reset todos los selectors e inputs
+    criticSelect.selectedIndex = 0;
+    dateSelect.selectedIndex = 0;
+    restSelect.innerHTML = '<option value="" disabled selected>Selecciona primero una fecha</option>';
+    restSelect.disabled = true;
+
+    fieldContainer.classList.remove('show');
+    fieldContainer.style.display = 'none';
+    badgeType.style.display = 'none';
+
+    inAvg.value = '';
+    in1.value = '';
+    in2.value = '';
+    in3.value = '';
+}

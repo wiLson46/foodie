@@ -3,20 +3,20 @@
  * Administra las solicitudes GET (para obtener críticos y fechas)
  * y POST (para cargar reseñas) desde la página de Frontend.
  *
- * IMPORTANTE: Después de pegar este código, crear una NUEVA implementación
- * (Desplegar > Nueva implementación) para que los cambios tomen efecto.
+ * ESTRUCTURA POR CRÍTICO (6 columnas):
+ * [comida, lugar, atencion, presentacion, precio, rating(AUTO)]
+ * La columna "rating" es la que termina en " rating" en el header.
+ * Los datos se escriben en las 5 columnas ANTERIORES al rating.
+ *
+ * IMPORTANTE: Después de pegar este código, crear una NUEVA implementación.
  */
 
 const SHEET_NAME = 'mainTable';
 
-/**
- * Responde a solicitudes HTTP GET.
- * Devuelve un JSON con: críticos, fechas, e información de restaurantes relacionada.
- * Detecta columnas dinámicamente leyendo los headers de la Fila 1.
- */
 function doGet(e) {
   try {
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(SHEET_NAME);
     if (!sheet) {
       return ContentService.createTextOutput(JSON.stringify({
         error: "No se encontró la pestaña '" + SHEET_NAME + "'"
@@ -31,6 +31,7 @@ function doGet(e) {
     }
 
     var headers = data[0];
+    var tz = ss.getSpreadsheetTimeZone(); // Usar timezone del spreadsheet
 
     // =============================================
     // 1. Detectar columnas clave dinámicamente
@@ -48,18 +49,23 @@ function doGet(e) {
 
     // =============================================
     // 2. Encontrar críticos buscando headers " rating"
-    //    Esto es más robusto que saltar de a N columnas.
+    //    El " rating" es la ÚLTIMA columna del bloque.
+    //    Las 5 columnas de datos están ANTES del rating.
     // =============================================
     var critics = [];
     for (var i = 0; i < headers.length; i++) {
       var h = String(headers[i]).toLowerCase().trim();
       if (h.endsWith(' rating')) {
         var criticName = h.replace(/ rating$/, '').trim();
-        // Capitalizar primera letra
         criticName = criticName.charAt(0).toUpperCase() + criticName.slice(1);
+
+        // dataStartCol = 5 columnas ANTES del rating (1-based para getRange)
+        var ratingCol1Based = i + 1;
+        var dataStartCol = ratingCol1Based - 5;
+
         critics.push({
           name: criticName,
-          colIndex: i + 1  // 1-based para getRange()
+          colIndex: dataStartCol  // Columna donde empieza el bloque de datos (1-based)
         });
       }
     }
@@ -78,10 +84,12 @@ function doGet(e) {
 
       if (!rawDate || !restaurant) continue;
 
-      // Formatear fecha (GAS puede devolver objeto Date nativo)
-      var dateStr = String(rawDate);
+      // Formatear fecha usando el timezone del spreadsheet
+      var dateStr = '';
       if (rawDate instanceof Date) {
-        dateStr = Utilities.formatDate(rawDate, Session.getScriptTimeZone(), "dd/MM/yyyy");
+        dateStr = Utilities.formatDate(rawDate, tz, "dd/MM/yyyy");
+      } else {
+        dateStr = String(rawDate);
       }
 
       datesSet[dateStr] = true;
@@ -92,7 +100,7 @@ function doGet(e) {
       restaurantsByDate[dateStr].push({
         name: String(restaurant),
         type: String(type),
-        rowIndex: r + 1  // 1-based para getRange()
+        rowIndex: r + 1  // 1-based
       });
     }
 
@@ -109,13 +117,13 @@ function doGet(e) {
       critics: critics,
       dates: sortedDates,
       restaurantsByDate: restaurantsByDate,
-      // Debug: incluir los headers detectados para verificación
       _debug: {
         dateCol: dateCol,
         nameCol: nameCol,
         typeCol: typeCol,
+        timezone: tz,
         totalHeaders: headers.length,
-        sampleHeaders: headers.slice(0, 20).map(function(h) { return String(h); })
+        sampleHeaders: headers.slice(0, 25).map(function(h) { return String(h); })
       }
     };
 
@@ -131,20 +139,24 @@ function doGet(e) {
 
 /**
  * Responde a solicitudes HTTP POST.
- * Graba una reseña garantizando usar el bloque correcto del crítico.
+ * Escribe la reseña en las 5 columnas de datos del crítico.
+ * NO toca la columna de rating/promedio (se auto-calcula en el sheet).
  *
  * Payload esperado:
  * {
  *   rowIndex: number (1-based),
- *   colIndex: number (1-based, columna del " rating" del crítico),
+ *   colIndex: number (1-based, inicio del bloque de datos),
  *   criticName: string,
  *   restaurantName: string,
  *   type: "presencial" | "delivery",
- *   values: { rating: number, comida: number, field2: number, field3: number }
+ *   values: { comida: number, field2: number, field3: number }
  * }
  *
- * El bloque por crítico es de 6 columnas:
- * [rating, comida, lugar, atencion, presentacion, precio]
+ * Bloque de 5 columnas de datos:
+ * [comida, lugar, atencion, presentacion, precio]
+ *
+ * Presencial: escribe comida, lugar, atencion (pos 1, 2, 3)
+ * Delivery:   escribe comida, presentacion, precio (pos 1, 4, 5)
  */
 function doPost(e) {
   try {
@@ -152,7 +164,7 @@ function doPost(e) {
     var postData = JSON.parse(e.postData.contents);
 
     var rowIndex = parseInt(postData.rowIndex);
-    var colIndex = parseInt(postData.colIndex);
+    var colIndex = parseInt(postData.colIndex); // Inicio del bloque de datos (1-based)
     var vals = postData.values;
     var type = String(postData.type || '').toLowerCase();
 
@@ -162,18 +174,18 @@ function doPost(e) {
 
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
 
-    // Construir el array de 6 valores según el tipo
-    // Orden de columnas: [rating, comida, lugar, atencion, presentacion, precio]
+    // Construir array de 5 valores para las columnas de datos
+    // Orden: [comida, lugar, atencion, presentacion, precio]
     var writeValues;
     if (type === 'delivery') {
-      writeValues = [vals.rating, vals.comida, "", "", vals.field2, vals.field3];
+      writeValues = [vals.comida, "", "", vals.field2, vals.field3];
     } else {
       // Presencial (por defecto)
-      writeValues = [vals.rating, vals.comida, vals.field2, vals.field3, "", ""];
+      writeValues = [vals.comida, vals.field2, vals.field3, "", ""];
     }
 
-    // Escribir exactamente 6 celdas en el bloque del crítico
-    var range = sheet.getRange(rowIndex, colIndex, 1, 6);
+    // Escribir exactamente 5 celdas (SIN tocar la 6ta que es el promedio auto)
+    var range = sheet.getRange(rowIndex, colIndex, 1, 5);
     range.setValues([writeValues]);
 
     return ContentService.createTextOutput(JSON.stringify({
