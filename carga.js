@@ -1,7 +1,7 @@
 /**
  * REEMPLAZA ESTA URL CON TU URL DE DEPLOY DE GOOGLE APPS SCRIPT
  */
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzmPkHBgOezU2jaHa28iL2cUSVYmN1pEULNk1QG_Jxow5i6N5S9McH7nSsywHdRRbN9/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxtDmXiZ6Wyr62IFdhTu-7D7G3wHS0FWiadNnxXi2RQ_DOZATN3_02Q6B916NPMxo7H/exec';
 
 // --- Estado global ---
 let appData = {
@@ -59,9 +59,12 @@ async function init() {
         statusText.style.color = "#2ecc71";
 
     } catch (error) {
-        console.error("Error al obtener datos:", error);
-        statusText.textContent = "❌ Error conectando con la base de datos.";
+        console.error("Error detallado al obtener datos:", error);
+        statusText.textContent = `❌ Error: ${error.message || "No se pudo conectar con la base de datos"}.`;
         statusText.style.color = "#e74c3c";
+
+        // Sugerencia para el usuario en consola
+        console.warn("Sugerencias de depuración:\n1. Verifica que el script esté publicado como 'Cualquiera' (Anyone).\n2. Asegúrate de que el nombre de la pestaña en Google Sheets sea exactamente 'mainTable'.\n3. Revisa la consola de red (F12 > Network) para ver si hay bloqueos de CORS.");
     }
 }
 
