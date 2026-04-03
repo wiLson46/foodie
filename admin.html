@@ -269,25 +269,44 @@
 
         /* --- Botones --- */
         .admin-btn {
-            padding: 0.75rem 1.5rem;
+            padding: 0 1.5rem;
             border: none;
             border-radius: 10px;
             font-family: var(--font-title);
             font-weight: 700;
             font-size: 0.95rem;
+            line-height: 1;
             cursor: pointer;
             transition: all 0.3s ease;
-            display: inline-flex;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            min-height: 48px;
+            text-align: center;
+        }
+
+        .btn-label {
+            display: flex;
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
-            position: relative;
-            overflow: hidden;
+            pointer-events: none;
+            line-height: 1;
         }
 
-        .admin-btn i {
+        .admin-btn i,
+        .admin-btn svg {
             width: 18px;
             height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 0;
+            line-height: 1;
+            flex-shrink: 0;
         }
 
         .admin-btn:disabled {
@@ -750,7 +769,7 @@
                                     <input type="text" class="admin-input" id="new-telefono" placeholder="011-xxxx-xxxx">
                                 </div>
                                 <div class="admin-form-group">
-                                    <label class="admin-label"><i data-lucide="instagram"></i> Instagram</label>
+                                    <label class="admin-label"><i data-lucide="camera"></i> Instagram</label>
                                     <input type="text" class="admin-input" id="new-instagram" placeholder="@usuario">
                                 </div>
                                 <div class="admin-form-group">

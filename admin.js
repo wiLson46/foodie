@@ -124,7 +124,22 @@ function toggleSection(name) {
 // =============================================
 // RENDERIZAR RESTAURANTES
 // =============================================
-function renderRestaurants(filterText) {
+function renderRestaurants(filterText = '') {
+    const restaurantsList = document.getElementById('restaurants-list');
+    
+    // Solo mostrar resultados si hay algo escrito en el buscador
+    if (!filterText.trim()) {
+        restaurantsList.innerHTML = `
+            <div class="empty-state" style="padding: 3rem 1.5rem; opacity: 0.5;">
+                <i data-lucide="search" style="width: 40px; height: 40px; margin-bottom: 1rem;"></i>
+                <p style="font-weight: 500;">Ingresá un nombre para gestionar restaurantes</p>
+            </div>
+        `;
+        restaurantCount.textContent = '0';
+        lucide.createIcons();
+        return;
+    }
+
     if (!adminData.restaurants || adminData.restaurants.length === 0) {
         restaurantsList.innerHTML = `
             <div class="empty-state">
@@ -137,15 +152,12 @@ function renderRestaurants(filterText) {
         return;
     }
 
-    let filtered = adminData.restaurants;
-    if (filterText) {
+    const filtered = adminData.restaurants.filter(r => {
         const q = filterText.toLowerCase();
-        filtered = filtered.filter(r =>
-            (r.name || '').toLowerCase().includes(q) ||
-            (r.location || '').toLowerCase().includes(q) ||
-            (r.fecha || '').toLowerCase().includes(q)
-        );
-    }
+        return (r.name || '').toLowerCase().includes(q) || 
+               (r.location || '').toLowerCase().includes(q) ||
+               (r.id || '').toLowerCase().includes(q);
+    });
 
     restaurantCount.textContent = filtered.length;
 
@@ -205,7 +217,7 @@ function renderRestaurants(filterText) {
                     <input type="text" class="admin-input" id="edit-telefono-${globalIdx}" value="${escapeHtml(r.telefono || '')}">
                 </div>
                 <div class="admin-form-group">
-                    <label class="admin-label"><i data-lucide="instagram"></i> Instagram</label>
+                    <label class="admin-label"><i data-lucide="camera"></i> Instagram</label>
                     <input type="text" class="admin-input" id="edit-instagram-${globalIdx}" value="${escapeHtml(r.instagram || '')}">
                 </div>
                 <div class="admin-form-group">
