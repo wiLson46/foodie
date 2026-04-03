@@ -30,13 +30,14 @@ function doGet(e) {
   try {
     var params = e ? e.parameter : {};
     var action = params.action || 'default';
+    var token = params.token || null;
 
     if (action === 'admin') {
       return sendJson(getAdminData());
     }
 
     // --- Flujo original: datos para index.html / carga.html ---
-    return sendJson(getPublicData());
+    return sendJson(getPublicData(token));
 
   } catch (error) {
     return sendJson({ error: error.toString() });
@@ -105,9 +106,8 @@ function generateRandomToken(length) {
 
 // =============================================
 // DATOS PÚBLICOS (index.html, carga.html)
-// — Lógica original preservada —
 // =============================================
-function getPublicData() {
+function getPublicData(token) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
@@ -177,7 +177,7 @@ function getPublicData() {
     return 0;
   });
 
-  return {
+  var resultData = {
     critics: critics,
     dates: sortedDates,
     restaurantsByDate: restaurantsByDate,
@@ -189,6 +189,29 @@ function getPublicData() {
       sampleHeaders: headers.slice(0, 25).map(function(h) { return String(h); })
     }
   };
+
+  if (token) {
+    var linksSheet = ss.getSheetByName(LINKS_SHEET_NAME);
+    if (linksSheet) {
+      var linksData = linksSheet.getDataRange().getValues();
+      var linksDisplayData = linksSheet.getDataRange().getDisplayValues();
+      for (var i = 1; i < linksData.length; i++) {
+        if (String(linksData[i][0]) === token) {
+          if (String(linksData[i][4]) === 'usado') {
+             break; // Token ya usado, no devolver tokenInfo
+          }
+          resultData.tokenInfo = {
+            critico: String(linksData[i][1]),
+            fecha: String(linksDisplayData[i][2]),
+            restaurante: String(linksDisplayData[i][3])
+          };
+          break;
+        }
+      }
+    }
+  }
+
+  return resultData;
 }
 
 // =============================================
@@ -199,12 +222,39 @@ function handleReviewSubmit(postData) {
   var colIndex = parseInt(postData.colIndex);
   var vals = postData.values;
   var type = String(postData.type || '').toLowerCase();
+  var token = postData.token;
+
+  if (!token) {
+    throw new Error("Se requiere un link confidencial para enviar reseñas.");
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var linksSheet = ss.getSheetByName(LINKS_SHEET_NAME);
+  if (!linksSheet) {
+    throw new Error("Falta la configuración de seguridad (links).");
+  }
+
+  var linksData = linksSheet.getDataRange().getValues();
+  var tokenRow = -1;
+  for (var i = 1; i < linksData.length; i++) {
+    if (String(linksData[i][0]) === token) {
+      if (String(linksData[i][4]) === 'usado') {
+        throw new Error("Este enlace ya ha sido utilizado para enviar una reseña.");
+      }
+      tokenRow = i + 1; // Indexación 1-based nativa en Google Sheets
+      break;
+    }
+  }
+
+  if (tokenRow === -1) {
+    throw new Error("El link proporcionado no es válido o fue modificado.");
+  }
 
   if (!rowIndex || !colIndex || !vals) {
     throw new Error("Datos de envío inválidos o incompletos.");
   }
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  var sheet = ss.getSheetByName(SHEET_NAME);
 
   var writeValues;
   if (type === 'delivery') {
@@ -215,6 +265,9 @@ function handleReviewSubmit(postData) {
 
   var range = sheet.getRange(rowIndex, colIndex, 1, 5);
   range.setValues([writeValues]);
+
+  // Marcar token como utilizado para cerrar la brecha de un solo uso
+  linksSheet.getRange(tokenRow, 5).setValue('usado');
 
   return {
     success: true,

@@ -251,6 +251,18 @@
             gap: 0.75rem;
         }
 
+        .links-fields-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.75rem;
+        }
+
+        @media (max-width: 600px) {
+            .links-fields-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .field-full {
             grid-column: 1 / -1;
         }
@@ -788,7 +800,7 @@
                         <i data-lucide="chevron-down" class="section-chevron" id="chevron-links"></i>
                     </div>
                     <div class="section-body" id="body-links">
-                        <div class="restaurant-fields-grid">
+                        <div class="links-fields-grid">
                             <div class="admin-form-group">
                                 <label class="admin-label"><i data-lucide="user"></i> Crítico</label>
                                 <select class="admin-select" id="link-critico">
@@ -798,13 +810,15 @@
                             <div class="admin-form-group">
                                 <label class="admin-label"><i data-lucide="utensils"></i> Restaurante</label>
                                 <select class="admin-select" id="link-restaurante">
-                                    <option value="" disabled selected>Seleccioná un restaurante</option>
+                                    <option value="" disabled selected>Selecciona restaurante</option>
                                 </select>
                             </div>
-                        </div>
-                        <div class="admin-form-group" id="link-fecha-group" style="margin-top: 0.25rem;">
-                            <label class="admin-label"><i data-lucide="calendar"></i> Fecha del restaurante</label>
-                            <input type="text" class="admin-input" id="link-fecha" readonly placeholder="Se autocompleta al elegir restaurante">
+                            <div class="admin-form-group">
+                                <label class="admin-label"><i data-lucide="calendar"></i> Fecha</label>
+                                <select class="admin-select" id="link-fecha" disabled>
+                                    <option value="" disabled selected>Elige fecha</option>
+                                </select>
+                            </div>
                         </div>
                         <button type="button" class="admin-btn btn-generate" id="btn-generate-link" onclick="generateLink()">
                             <span class="btn-label"><i data-lucide="zap"></i> Generar y Copiar Link</span>

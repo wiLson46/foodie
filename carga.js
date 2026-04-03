@@ -1,7 +1,7 @@
 /**
  * URL del Web App de Google Apps Script
  */
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz2f2NxVcWLWyZyFU4km0pHYFpLZJAHim9Dl6Nyxb3_WSGnDKDliZxHT3tIh0qM7rs/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwHxKLbn2z5Z_UWLbwQht6gz8ZdtplrJf5gG4w4EJp_GxfoZ7_H4T7g-5gZSACR5phA/exec';
 
 // --- Estado global ---
 let appData = {
@@ -9,6 +9,8 @@ let appData = {
     dates: [],
     restaurantsByDate: {}
 };
+let appToken = null;
+let isSuccess = false;
 
 let currentType = 'presencial';
 
@@ -61,7 +63,12 @@ async function init() {
     resultBtn.addEventListener('click', resetForm);
 
     try {
-        const res = await fetch(SCRIPT_URL);
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token') || urlParams.get('id');
+        appToken = token;
+        const reqUrl = SCRIPT_URL + (token ? `?token=${token}` : "");
+
+        const res = await fetch(reqUrl);
         const json = await res.json();
 
         if (json.error) throw new Error(json.error);
@@ -73,6 +80,10 @@ async function init() {
         populateCritics();
         populateDates();
 
+        if (appData.tokenInfo) {
+            autoSelectFromToken(appData.tokenInfo);
+        }
+
         statusText.textContent = "Datos sincronizados correctamente.";
         statusText.style.color = "#2ecc71";
 
@@ -81,6 +92,44 @@ async function init() {
         statusText.textContent = `❌ Error: ${error.message || "No se pudo conectar"}.`;
         statusText.style.color = "#e74c3c";
     }
+}
+
+// --- Autocompletado por link secreto ---
+function autoSelectFromToken(info) {
+    if (!info) return;
+
+    // 1. Setear y bloquear crítico
+    for (let i = 0; i < criticSelect.options.length; i++) {
+        if (criticSelect.options[i].text === info.critico) {
+            criticSelect.selectedIndex = i;
+            break;
+        }
+    }
+    criticSelect.disabled = true;
+
+    // 2. Setear y bloquear fecha
+    for (let i = 0; i < dateSelect.options.length; i++) {
+        if (dateSelect.options[i].text === info.fecha) {
+            dateSelect.selectedIndex = i;
+            break;
+        }
+    }
+    dateSelect.disabled = true;
+
+    // 3. Disparar el evento change para poblar los restaurantes de esa fecha
+    dateSelect.dispatchEvent(new Event('change'));
+
+    // 4. Setear y bloquear restaurante
+    for (let i = 0; i < restSelect.options.length; i++) {
+        if (restSelect.options[i].text === info.restaurante) {
+            restSelect.selectedIndex = i;
+            break;
+        }
+    }
+    restSelect.disabled = true;
+
+    // 5. Disparar el evento change para mostrar los campos de puntuación
+    restSelect.dispatchEvent(new Event('change'));
 }
 
 // --- Auto-cálculo del promedio ---
@@ -197,6 +246,7 @@ form.addEventListener('submit', async (e) => {
     }
 
     const payload = {
+        token: appToken,
         rowIndex: parseInt(restOpt.value),
         colIndex: parseInt(criticOpt.value),
         criticName: criticOpt.dataset.name,
@@ -237,15 +287,20 @@ form.addEventListener('submit', async (e) => {
 
 // --- Modal de resultado ---
 function showResult(success, title, message) {
+    isSuccess = success;
     resultIconSuccess.style.display = success ? 'flex' : 'none';
     resultIconError.style.display = success ? 'none' : 'flex';
     resultTitle.textContent = title;
     resultMessage.textContent = message;
-    resultBtn.textContent = success ? "Cargar otra reseña" : "Volver a intentar";
+    resultBtn.textContent = success ? "Ir al Inicio" : "Volver a intentar";
     resultModal.classList.remove('hidden');
 }
 
 function resetForm() {
+    if (isSuccess) {
+        window.location.href = 'index.html';
+        return;
+    }
     resultModal.classList.add('hidden');
 
     // Reset todos los selectors e inputs

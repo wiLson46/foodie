@@ -8,7 +8,7 @@
 // =============================================
 // CONFIGURACIÓN
 // =============================================
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz2f2NxVcWLWyZyFU4km0pHYFpLZJAHim9Dl6Nyxb3_WSGnDKDliZxHT3tIh0qM7rs/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwHxKLbn2z5Z_UWLbwQht6gz8ZdtplrJf5gG4w4EJp_GxfoZ7_H4T7g-5gZSACR5phA/exec';
 
 // =============================================
 // ESTADO GLOBAL
@@ -52,7 +52,29 @@ async function initAdmin() {
         if (json.error) throw new Error(json.error);
 
         adminData = json;
-        console.log('Admin data loaded:', adminData);
+        
+        // --- Ordenamiento Global ---
+        // 1. Críticos: Orden Alfabético
+        if (adminData.critics) {
+            adminData.critics.sort((a, b) => a.localeCompare(b));
+        }
+
+        // 2. Restaurantes: Nombre (A-Z) y luego Fecha (Descendente)
+        if (adminData.restaurants) {
+            adminData.restaurants.sort((a, b) => {
+                const nameA = (a.name || '').toLowerCase();
+                const nameB = (b.name || '').toLowerCase();
+                if (nameA < nameB) return -1;
+                if (nameA > nameB) return 1;
+
+                // Si se llama igual, la fecha más nueva primero
+                const dateA = (a.fecha || '').split('/').reverse().join('');
+                const dateB = (b.fecha || '').split('/').reverse().join('');
+                return dateB.localeCompare(dateA);
+            });
+        }
+
+        console.log('Admin data loaded (sorted):', adminData);
 
         if (adminData.nextId) {
             const newIdInput = document.getElementById('new-id');
@@ -385,7 +407,7 @@ function clearNewForm() {
 let linkSelectorsInitialized = false;
 
 function populateLinkSelectors() {
-    // Críticos
+    // Críticos (Ya vienen ordenados globalmente)
     const criticoSelect = document.getElementById('link-critico');
     criticoSelect.innerHTML = '<option value="" disabled selected>Seleccioná un crítico</option>';
     (adminData.critics || []).forEach(c => {
@@ -395,23 +417,51 @@ function populateLinkSelectors() {
         criticoSelect.appendChild(opt);
     });
 
-    // Restaurantes
+    // Restaurantes (Únicos y ordenados)
     const restoSelect = document.getElementById('link-restaurante');
-    restoSelect.innerHTML = '<option value="" disabled selected>Seleccioná un restaurante</option>';
+    const fechaSelect = document.getElementById('link-fecha');
+    
+    restoSelect.innerHTML = '<option value="" disabled selected>Selecciona restaurante</option>';
+    fechaSelect.innerHTML = '<option value="" disabled selected>Elige fecha</option>';
+    fechaSelect.disabled = true;
+
+    // Obtener nombres únicos manteniendo el orden actual (que ya es alfabético)
+    const uniqueNames = [];
     (adminData.restaurants || []).forEach(r => {
+        if (!uniqueNames.includes(r.name)) {
+            uniqueNames.push(r.name);
+        }
+    });
+    
+    uniqueNames.forEach(name => {
         const opt = document.createElement('option');
-        opt.value = r.name;
-        opt.textContent = `${r.name} — ${r.fecha || 'Sin fecha'}`;
-        opt.dataset.fecha = r.fecha || '';
+        opt.value = name;
+        opt.textContent = name;
         restoSelect.appendChild(opt);
     });
 
-    // Auto-fill fecha — attach listener only once
+    // Listener para poblar fechas al elegir restaurante (ya vienen ordenadas descendente)
     if (!linkSelectorsInitialized) {
         restoSelect.addEventListener('change', () => {
-            const selectedOpt = restoSelect.selectedOptions[0];
-            if (selectedOpt) {
-                document.getElementById('link-fecha').value = selectedOpt.dataset.fecha || '';
+            const selectedName = restoSelect.value;
+            fechaSelect.innerHTML = '<option value="" disabled selected>Elige fecha</option>';
+            
+            const matches = adminData.restaurants.filter(r => r.name === selectedName);
+            
+            if (matches.length > 0) {
+                matches.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.fecha;
+                    opt.textContent = m.fecha || 'Sin fecha';
+                    fechaSelect.appendChild(opt);
+                });
+                fechaSelect.disabled = false;
+                // Auto-seleccionar la primera fecha si solo hay una
+                if (matches.length === 1) {
+                    fechaSelect.selectedIndex = 1;
+                }
+            } else {
+                fechaSelect.disabled = true;
             }
         });
         linkSelectorsInitialized = true;
@@ -424,8 +474,8 @@ async function generateLink() {
     const restaurante = document.getElementById('link-restaurante').value;
     const fecha = document.getElementById('link-fecha').value;
 
-    if (!critico || !restaurante) {
-        showToast('Seleccioná un crítico y un restaurante', 'error');
+    if (!critico || !restaurante || !fecha) {
+        showToast('Seleccioná un crítico, un restaurante y una fecha', 'error');
         return;
     }
 
