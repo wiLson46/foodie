@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Admin - Comer.ar</title>
+    <meta name="description" content="Panel de administración para gestionar restaurantes y generar links">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Libraries -->
+    <script src="https://unpkg.com/lucide@latest" defer></script>
+
+    <style>
+        /* ========================================
+           ADMIN PANEL — Estilos adicionales
+           Mobile-First, cohesivo con carga.html
+           ======================================== */
+
+        .admin-container {
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 0;
+        }
+
+        /* --- Secciones colapsables --- */
+        .admin-section {
+            margin-bottom: 1.5rem;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: var(--card-bg);
+            transition: box-shadow 0.3s ease;
+        }
+
+        .admin-section:hover {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+        }
+
+        .dark-mode .admin-section:hover {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s ease;
+            border-bottom: 1px solid transparent;
+        }
+
+        .section-header:hover {
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        .dark-mode .section-header:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .section-header.open {
+            border-bottom-color: var(--border);
+        }
+
+        .section-header-left {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .section-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .section-icon i {
+            width: 20px;
+            height: 20px;
+            color: #fff;
+        }
+
+        .section-icon-restaurants { background: linear-gradient(135deg, #667eea, #764ba2); }
+        .section-icon-add { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+        .section-icon-links { background: linear-gradient(135deg, #f39c12, #e67e22); }
+
+        .section-title {
+            font-family: var(--font-title);
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--text-main);
+        }
+
+        .section-subtitle {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.15rem;
+        }
+
+        .section-chevron {
+            transition: transform 0.3s ease;
+            color: var(--text-muted);
+        }
+
+        .section-chevron.open {
+            transform: rotate(180deg);
+        }
+
+        .section-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                        padding 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 0 1.5rem;
+        }
+
+        .section-body.open {
+            max-height: 50000px; /* Very large for dynamic content */
+            padding: 1.5rem;
+        }
+
+        /* --- Formularios --- */
+        .admin-form-group {
+            margin-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .admin-label {
+            font-family: var(--font-body);
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .admin-label i {
+            width: 14px;
+            height: 14px;
+        }
+
+        .admin-input, .admin-select, .admin-textarea {
+            width: 100%;
+            padding: 0.7rem 0.9rem;
+            background: var(--bg);
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            font-family: var(--font-body);
+            font-size: 0.95rem;
+            color: var(--text-main);
+            transition: all 0.25s ease;
+            outline: none;
+        }
+
+        .admin-textarea {
+            resize: vertical;
+            min-height: 70px;
+        }
+
+        .admin-input:hover:not(:disabled),
+        .admin-select:hover:not(:disabled),
+        .admin-textarea:hover:not(:disabled) {
+            border-color: var(--text-muted);
+        }
+
+        .admin-input:focus,
+        .admin-select:focus,
+        .admin-textarea:focus {
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(255, 145, 0, 0.1);
+        }
+
+        .admin-input:disabled,
+        .admin-select:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* --- Bloques de restaurante --- */
+        .restaurant-block {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .restaurant-block:hover {
+            border-color: rgba(255, 145, 0, 0.3);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+        }
+
+        .dark-mode .restaurant-block:hover {
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .restaurant-block-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .restaurant-block-name {
+            font-family: var(--font-title);
+            font-weight: 700;
+            font-size: 1.15rem;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .restaurant-block-name .row-badge {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.15rem 0.5rem;
+            border-radius: 6px;
+            background: rgba(255, 145, 0, 0.1);
+            color: var(--gold);
+            font-family: var(--font-body);
+        }
+
+        .restaurant-fields-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .field-full {
+            grid-column: 1 / -1;
+        }
+
+        /* --- Botones --- */
+        .admin-btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 10px;
+            font-family: var(--font-title);
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .admin-btn i {
+            width: 18px;
+            height: 18px;
+        }
+
+        .admin-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn-save {
+            background: var(--text-main);
+            color: var(--bg);
+            width: 100%;
+            margin-top: 0.75rem;
+        }
+
+        .btn-save:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+            background: var(--gold);
+            color: #fff;
+        }
+
+        .btn-create {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            color: #fff;
+            width: 100%;
+            padding: 1rem;
+            font-size: 1.05rem;
+        }
+
+        .btn-create:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(46, 204, 113, 0.3);
+        }
+
+        .btn-generate {
+            background: linear-gradient(135deg, #f39c12, #e67e22);
+            color: #fff;
+            width: 100%;
+            padding: 1rem;
+            font-size: 1.05rem;
+        }
+
+        .btn-generate:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(243, 156, 18, 0.3);
+        }
+
+        .btn-copy {
+            background: var(--card-bg);
+            color: var(--text-main);
+            border: 2px solid var(--border);
+            padding: 0.6rem 1rem;
+            font-size: 0.85rem;
+        }
+
+        .btn-copy:hover:not(:disabled) {
+            border-color: var(--gold);
+            color: var(--gold);
+        }
+
+        /* --- Link result --- */
+        .link-result {
+            display: none;
+            margin-top: 1.25rem;
+            padding: 1.25rem;
+            background: rgba(46, 204, 113, 0.06);
+            border: 1.5px solid rgba(46, 204, 113, 0.2);
+            border-radius: 12px;
+            animation: fadeInFields 0.4s ease forwards;
+        }
+
+        .link-result.show {
+            display: block;
+        }
+
+        .link-result-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .link-result-url {
+            word-break: break-all;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            color: var(--text-main);
+            background: var(--bg);
+            padding: 0.75rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            margin-bottom: 0.75rem;
+            line-height: 1.6;
+        }
+
+        /* --- Toast notifications --- */
+        .toast-container {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        .toast {
+            padding: 0.85rem 1.5rem;
+            border-radius: 12px;
+            font-family: var(--font-body);
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #fff;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+            pointer-events: auto;
+            animation: toastIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            max-width: 90vw;
+        }
+
+        .toast-success {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+        }
+
+        .toast-error {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+        }
+
+        .toast-info {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+        }
+
+        .toast.removing {
+            animation: toastOut 0.3s ease forwards;
+        }
+
+        @keyframes toastIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes toastOut {
+            to {
+                opacity: 0;
+                transform: translateY(20px) scale(0.95);
+            }
+        }
+
+        @keyframes fadeInFields {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* --- Loading state --- */
+        .admin-loader {
+            text-align: center;
+            padding: 3rem 1.5rem;
+            color: var(--text-muted);
+        }
+
+        .admin-loader .spinner-large {
+            width: 36px;
+            height: 36px;
+            border: 3px solid var(--border);
+            border-radius: 50%;
+            border-top-color: var(--gold);
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .btn-spinner {
+            width: 18px;
+            height: 18px;
+            border: 2.5px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 0.7s linear infinite;
+            display: none;
+        }
+
+        .admin-btn.loading .btn-spinner {
+            display: inline-block;
+        }
+
+        .admin-btn.loading .btn-label {
+            display: none;
+        }
+
+        /* --- Presencial / Delivery selector in forms --- */
+        .radio-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .radio-option {
+            flex: 1;
+            position: relative;
+        }
+
+        .radio-option input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .radio-option label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.6rem;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-family: var(--font-body);
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.25s ease;
+            text-align: center;
+        }
+
+        .radio-option input[type="radio"]:checked + label {
+            border-color: var(--gold);
+            color: var(--gold);
+            background: rgba(255, 145, 0, 0.08);
+        }
+
+        /* --- Search/filter bar --- */
+        .search-bar {
+            position: relative;
+            margin-bottom: 1.25rem;
+        }
+
+        .search-bar i {
+            position: absolute;
+            left: 0.85rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 18px;
+            height: 18px;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
+        .search-bar input {
+            padding-left: 2.5rem;
+        }
+
+        /* --- Empty state --- */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state i {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        /* ========================================
+           RESPONSIVE
+           ======================================== */
+        @media (max-width: 600px) {
+            .restaurant-fields-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .section-header {
+                padding: 1rem;
+            }
+
+            .section-body.open {
+                padding: 1rem;
+            }
+
+            .restaurant-block {
+                padding: 1rem;
+            }
+
+            .section-title {
+                font-size: 1rem;
+            }
+
+            .restaurant-block-name {
+                font-size: 1rem;
+            }
+
+            .admin-btn {
+                padding: 0.65rem 1rem;
+                font-size: 0.9rem;
+            }
+        }
+
+        @media (min-width: 601px) {
+            .restaurant-fields-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (min-width: 900px) {
+            .restaurant-fields-grid {
+                grid-template-columns: 1fr 1fr 1fr;
+            }
+        }
+
+        /* --- Admin Header --- */
+        .admin-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .admin-header h1 {
+            font-family: var(--font-title);
+            font-size: 2rem;
+            font-weight: 800;
+            margin-top: 1rem;
+            background: linear-gradient(135deg, var(--text-main), var(--gold));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* --- Restaurant count badge --- */
+        .count-badge {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+            font-family: var(--font-body);
+        }
+
+        .dark-mode .count-badge {
+            background: rgba(102, 126, 234, 0.2);
+        }
+    </style>
+</head>
+
+<body class="light-mode">
+    <div id="app">
+        <!-- Settings Nav -->
+        <nav class="settings-nav" aria-label="Configuración">
+            <div class="dropdown">
+                <button id="settings-btn" class="icon-btn" aria-label="Abrir menú de configuración"
+                    aria-expanded="false">
+                    <i data-lucide="settings"></i>
+                </button>
+                <div id="settings-menu" class="dropdown-content hidden" role="menu">
+                    <div class="menu-item" role="menuitem">
+                        <span>Modo Oscuro</span>
+                        <label class="switch">
+                            <input type="checkbox" id="dark-mode-toggle" aria-label="Activar modo oscuro">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <a href="index.html" class="icon-btn"
+                style="margin-right: 0.5rem; text-decoration: none; display: inline-flex" aria-label="Volver a Inicio">
+                <i data-lucide="home"></i>
+            </a>
+        </nav>
+
+        <!-- Header -->
+        <header class="admin-header">
+            <div class="logo-container">
+                <img src="./fotos/imagenes/logoB.png" alt="Comer.ar Logo" class="logo-img light-logo">
+                <img src="./fotos/imagenes/logoW.png" alt="Comer.ar Logo" class="logo-img dark-logo">
+            </div>
+            <h1>Panel de Administración</h1>
+            <p class="subtitle" id="status-text">Conectando con la base de datos...</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="admin-container">
+            <!-- Loading State -->
+            <div id="admin-loader" class="admin-loader">
+                <div class="spinner-large"></div>
+                <p>Cargando datos del panel...</p>
+            </div>
+
+            <!-- Sections (hidden until loaded) -->
+            <div id="admin-content" style="display: none;">
+
+                <!-- =======================================
+                     SECTION B: Nuevo Restaurante
+                     ======================================= -->
+                <div class="admin-section" id="section-add">
+                    <div class="section-header" onclick="toggleSection('add')">
+                        <div class="section-header-left">
+                            <div class="section-icon section-icon-add">
+                                <i data-lucide="plus-circle"></i>
+                            </div>
+                            <div>
+                                <div class="section-title">Nuevo Restaurante</div>
+                                <div class="section-subtitle">Agregar un restaurante a la tabla</div>
+                            </div>
+                        </div>
+                        <i data-lucide="chevron-down" class="section-chevron" id="chevron-add"></i>
+                    </div>
+                    <div class="section-body" id="body-add">
+                        <form id="new-restaurant-form" onsubmit="return false;">
+                            <div class="restaurant-fields-grid">
+                                <div class="admin-form-group">
+                                    <label class="admin-label"><i data-lucide="hash"></i> ID</label>
+                                    <input type="text" class="admin-input" id="new-id" value="Auto" disabled style="background: rgba(0,0,0,0.05); font-weight: bold; color: var(--gold);">
+                                </div>
+                                <div class="admin-form-group">
+                                    <label class="admin-label"><i data-lucide="store"></i> Nombre *</label>
+                                    <input type="text" class="admin-input" id="new-name" placeholder="Nombre del restaurante" required>
+                                </div>
+                                <div class="admin-form-group">
+                                    <label class="admin-label"><i data-lucide="map-pin"></i> Ubicación</label>
+                                    <input type="text" class="admin-input" id="new-location" placeholder="Ej: Palermo, CABA">
+                                </div>
+                                <div class="admin-form-group field-full">
+                                    <label class="admin-label"><i data-lucide="file-text"></i> Descripción</label>
+                                    <textarea class="admin-textarea" id="new-description" placeholder="Descripción del restaurante..."></textarea>
+                                </div>
+                                <div class="admin-form-group">
+                                    <label class="admin-label"><i data-lucide="calendar"></i> Fecha</label>
+                                    <input type="text" class="admin-input" id="new-fecha" placeholder="DD/MM/YYYY">
+                                </div>
+                                <div class="admin-form-group">
+                                    <label class="admin-label"><i data-lucide="navigation"></i> Dirección</label>
+                                    <input type="text" class="admin-input" id="new-direccion" placeholder="Calle y número">
+                                </div>
+                                <div class="admin-form-group">
+                                    <label class="admin-label"><i data-lucide="phone"></i> Teléfono</label>
+                                    <input type="text" class="admin-input" id="new-telefono" placeholder="011-xxxx-xxxx">
+                                </div>
+                                <div class="admin-form-group">
+                                    <label class="admin-label"><i data-lucide="instagram"></i> Instagram</label>
+                                    <input type="text" class="admin-input" id="new-instagram" placeholder="@usuario">
+                                </div>
+                                <div class="admin-form-group">
+                                    <label class="admin-label"><i data-lucide="map"></i> Link Mapa</label>
+                                    <input type="url" class="admin-input" id="new-linkMapa" placeholder="https://maps.google.com/...">
+                                </div>
+                                <div class="admin-form-group">
+                                    <label class="admin-label"><i data-lucide="truck"></i> Modalidad</label>
+                                    <div class="radio-group">
+                                        <div class="radio-option">
+                                            <input type="radio" name="new-modalidad" id="new-modal-p" value="P" checked>
+                                            <label for="new-modal-p">🍽️ Presencial</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" name="new-modalidad" id="new-modal-d" value="D">
+                                            <label for="new-modal-d">📦 Delivery</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="admin-form-group">
+                                    <label class="admin-label"><i data-lucide="shopping-bag"></i> Pedido por</label>
+                                    <input type="text" class="admin-input" id="new-pedidoPor" placeholder="Rappi, PedidosYa...">
+                                </div>
+                            </div>
+                            <button type="button" class="admin-btn btn-create" id="btn-create-restaurant" onclick="createRestaurant()">
+                                <span class="btn-label"><i data-lucide="plus"></i> Crear Restaurante</span>
+                                <div class="btn-spinner"></div>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- =======================================
+                     SECTION C: Generador de Links
+                     ======================================= -->
+                <div class="admin-section" id="section-links">
+                    <div class="section-header" onclick="toggleSection('links')">
+                        <div class="section-header-left">
+                            <div class="section-icon section-icon-links">
+                                <i data-lucide="link-2"></i>
+                            </div>
+                            <div>
+                                <div class="section-title">Generador de Links</div>
+                                <div class="section-subtitle">Links de un solo uso para críticos</div>
+                            </div>
+                        </div>
+                        <i data-lucide="chevron-down" class="section-chevron" id="chevron-links"></i>
+                    </div>
+                    <div class="section-body" id="body-links">
+                        <div class="restaurant-fields-grid">
+                            <div class="admin-form-group">
+                                <label class="admin-label"><i data-lucide="user"></i> Crítico</label>
+                                <select class="admin-select" id="link-critico">
+                                    <option value="" disabled selected>Seleccioná un crítico</option>
+                                </select>
+                            </div>
+                            <div class="admin-form-group">
+                                <label class="admin-label"><i data-lucide="utensils"></i> Restaurante</label>
+                                <select class="admin-select" id="link-restaurante">
+                                    <option value="" disabled selected>Seleccioná un restaurante</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="admin-form-group" id="link-fecha-group" style="margin-top: 0.25rem;">
+                            <label class="admin-label"><i data-lucide="calendar"></i> Fecha del restaurante</label>
+                            <input type="text" class="admin-input" id="link-fecha" readonly placeholder="Se autocompleta al elegir restaurante">
+                        </div>
+                        <button type="button" class="admin-btn btn-generate" id="btn-generate-link" onclick="generateLink()">
+                            <span class="btn-label"><i data-lucide="zap"></i> Generar y Copiar Link</span>
+                            <div class="btn-spinner"></div>
+                        </button>
+
+                        <!-- Link result -->
+                        <div class="link-result" id="link-result">
+                            <div class="link-result-label">✅ Link generado</div>
+                            <div class="link-result-url" id="link-result-url"></div>
+                            <button type="button" class="admin-btn btn-copy" id="btn-copy-link" onclick="copyLink()">
+                                <i data-lucide="clipboard-copy"></i>
+                                <span>Copiar al portapapeles</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- =======================================
+                     SECTION A: Gestión de Restaurantes
+                     ======================================= -->
+                <div class="admin-section" id="section-restaurants">
+                    <div class="section-header" onclick="toggleSection('restaurants')">
+                        <div class="section-header-left">
+                            <div class="section-icon section-icon-restaurants">
+                                <i data-lucide="list"></i>
+                            </div>
+                            <div>
+                                <div class="section-title">Gestión de Restaurantes <span class="count-badge" id="restaurant-count">0</span></div>
+                                <div class="section-subtitle">Editar datos de restaurantes existentes</div>
+                            </div>
+                        </div>
+                        <i data-lucide="chevron-down" class="section-chevron" id="chevron-restaurants"></i>
+                    </div>
+                    <div class="section-body" id="body-restaurants">
+                        <!-- Search bar -->
+                        <div class="search-bar">
+                            <i data-lucide="search"></i>
+                            <input type="text" class="admin-input" id="search-restaurants"
+                                placeholder="Buscar restaurante..." oninput="filterRestaurants()">
+                        </div>
+
+                        <!-- Restaurant blocks container -->
+                        <div id="restaurants-list">
+                            <!-- Dynamically populated -->
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer" style="text-align: center; margin-top: 3rem;">
+            <p>Copyright 2026 - Comer.ar — Panel Admin</p>
+        </footer>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Dark Mode Logic (shared pattern) -->
+    <script>
+        const darkModeToggle = document.getElementById('dark-mode-toggle');
+        const body = document.body;
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsMenu = document.getElementById('settings-menu');
+
+        const isDarkMode = localStorage.getItem('darkMode') === 'true';
+        if (isDarkMode) {
+            body.classList.remove('light-mode');
+            body.classList.add('dark-mode');
+            darkModeToggle.checked = true;
+        }
+
+        darkModeToggle.addEventListener('change', () => {
+            if (darkModeToggle.checked) {
+                body.classList.remove('light-mode');
+                body.classList.add('dark-mode');
+                localStorage.setItem('darkMode', 'true');
+            } else {
+                body.classList.remove('dark-mode');
+                body.classList.add('light-mode');
+                localStorage.setItem('darkMode', 'false');
+            }
+        });
+
+        settingsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            settingsMenu.classList.toggle('hidden');
+            const isExpanded = settingsBtn.getAttribute('aria-expanded') === 'true';
+            settingsBtn.setAttribute('aria-expanded', !isExpanded);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!settingsMenu.classList.contains('hidden') && !e.target.closest('.settings-nav')) {
+                settingsMenu.classList.add('hidden');
+                settingsBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+    </script>
+
+    <!-- Admin JS -->
+    <script src="admin.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>
