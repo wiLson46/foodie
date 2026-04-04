@@ -134,9 +134,22 @@ function autoSelectFromToken(info) {
 
 // --- Auto-cálculo del promedio ---
 function updateAverage() {
-    const v1 = parseFloat(in1.value);
-    const v2 = parseFloat(in2.value);
-    const v3 = parseFloat(in3.value);
+    let v1 = parseFloat(in1.value);
+    let v2 = parseFloat(in2.value);
+    let v3 = parseFloat(in3.value);
+
+    // Corregir valores fuera de rango o con exceso de decimales
+    const checkAndFix = (input) => {
+        let val = parseFloat(input.value);
+        if (isNaN(val)) return NaN;
+        if (val < 0) { input.value = 0; val = 0; }
+        if (val > 10) { input.value = 10; val = 10; }
+        return val;
+    };
+
+    v1 = checkAndFix(in1);
+    v2 = checkAndFix(in2);
+    v3 = checkAndFix(in3);
 
     if (!isNaN(v1) && !isNaN(v2) && !isNaN(v3)) {
         inAvg.value = ((v1 + v2 + v3) / 3).toFixed(2);
@@ -242,6 +255,11 @@ form.addEventListener('submit', async (e) => {
 
     if (isNaN(comida) || isNaN(field2) || isNaN(field3)) {
         showResult(false, "Campos incompletos", "Todos los puntajes son obligatorios.");
+        return;
+    }
+
+    if (comida < 0 || comida > 10 || field2 < 0 || field2 > 10 || field3 < 0 || field3 > 10) {
+        showResult(false, "Valores inválidos", "Los puntajes deben estar entre 0 y 10.");
         return;
     }
 
