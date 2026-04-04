@@ -739,6 +739,11 @@
                     </div>
                     <div class="section-body" id="body-add">
                         <form id="new-restaurant-form" onsubmit="return false;">
+                            <div class="admin-form-group smart-paste-container" style="margin-bottom: 1.5rem; background: rgba(102, 126, 234, 0.05); border: 2px dashed rgba(102, 126, 234, 0.3); padding: 1rem; border-radius: 14px;">
+                                <label class="admin-label" style="color: #667eea; margin-bottom: 0.5rem;"><i data-lucide="bot"></i> Asistente de Carga (Opcional)</label>
+                                <textarea class="admin-textarea" id="smart-paste" placeholder="Pegá aquí el JSON generado por Gemini u otra IA para auto-completar el formulario..." style="min-height: 70px; background: rgba(255,255,255,0.5);"></textarea>
+                            </div>
+
                             <div class="restaurant-fields-grid">
                                 <div class="admin-form-group">
                                     <label class="admin-label"><i data-lucide="hash"></i> ID</label>

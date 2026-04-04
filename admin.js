@@ -84,6 +84,7 @@ async function initAdmin() {
         // Render UI
         renderRestaurants();
         populateLinkSelectors();
+        setupSmartPaste();
 
         // Show content
         adminLoader.style.display = 'none';
@@ -607,4 +608,66 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+// =============================================
+// SMART PASTE (JSON Auto-fill)
+// =============================================
+function setupSmartPaste() {
+    const pasteArea = document.getElementById('smart-paste');
+    if (!pasteArea) return;
+
+    // Saneamiento de seguridad estricto (Previene vulnerabilidades XSS por inyección)
+    const sanitizePasteValue = (val) => {
+        if (typeof val !== 'string') return String(val || '');
+        // Eliminar posibles etiquetas HTML, scripts, iframes...
+        return val.replace(/<[^>]*>?/gm, '').trim(); 
+    };
+
+    pasteArea.addEventListener('input', (e) => {
+        const val = e.target.value.trim();
+        if (!val || val.length < 10) return; // Validación básica de tamaño antes de intentar parsear
+
+        try {
+            const data = JSON.parse(val);
+
+            // Mapeo seguro de claves del origen Gemini a los Inputs de admin.html
+            const mapping = {
+                name: 'new-name',
+                location: 'new-location',
+                description: 'new-description',
+                fecha: 'new-fecha',
+                direccion: 'new-direccion',
+                telefono: 'new-telefono',
+                instagram: 'new-instagram',
+                linkMapa: 'new-linkMapa',
+                pedidoPor: 'new-pedidoPor'
+            };
+
+            for (const key in mapping) {
+                if (data[key] !== undefined && data[key] !== null) {
+                    const input = document.getElementById(mapping[key]);
+                    if (input) {
+                        input.value = sanitizePasteValue(data[key]);
+                    }
+                }
+            }
+
+            // Tratamiento especial radio button
+            if (data.modalidad) {
+                const modInput = sanitizePasteValue(String(data.modalidad)).toUpperCase();
+                if (modInput === 'D' || modInput.includes('DELIVERY')) {
+                    document.getElementById('new-modal-d').checked = true;
+                } else if (modInput === 'P' || modInput.includes('PRESENCIAL')) {
+                    document.getElementById('new-modal-p').checked = true;
+                }
+            }
+
+            pasteArea.value = ''; // Limpiar el pegado exitoso
+            showToast('✅ Campos completados exitosamente', 'success');
+
+        } catch (error) {
+            // Falla de parseo silenciada (el usuario aún está pegando/escribiendo o pego mal)
+        }
+    });
 }
