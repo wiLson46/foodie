@@ -519,6 +519,18 @@ function addRestaurant(postData) {
     }
   }
 
+  // --- NUEVO: Propagar fórmulas de RATING (promedios) ---
+  if (insertRowIndex > 2) {
+    for (var i = 0; i < headers.length; i++) {
+      var h = String(headers[i]).toLowerCase().trim();
+      if (h.endsWith(' rating')) {
+        var sourceRange = sheet.getRange(insertRowIndex - 1, i + 1);
+        var destRange = sheet.getRange(insertRowIndex, i + 1);
+        sourceRange.copyTo(destRange, SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
+      }
+    }
+  }
+
   return {
     success: true,
     message: "Restaurante '" + datos.name + "' creado exitosamente.",

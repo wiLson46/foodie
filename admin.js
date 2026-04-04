@@ -8,7 +8,7 @@
 // =============================================
 // CONFIGURACIÓN
 // =============================================
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwHxKLbn2z5Z_UWLbwQht6gz8ZdtplrJf5gG4w4EJp_GxfoZ7_H4T7g-5gZSACR5phA/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw6Vg9eGEYZPR6HgcGxfbRR1gU9QRUPtDP_GE9mteCO5WcFbLHHyYQGkcw_1uDRZ_CX/exec';
 
 // =============================================
 // ESTADO GLOBAL
@@ -52,7 +52,7 @@ async function initAdmin() {
         if (json.error) throw new Error(json.error);
 
         adminData = json;
-        
+
         // --- Ordenamiento Global ---
         // 1. Críticos: Orden Alfabético
         if (adminData.critics) {
@@ -127,7 +127,7 @@ function toggleSection(name) {
 // =============================================
 function renderRestaurants(filterText = '') {
     const restaurantsList = document.getElementById('restaurants-list');
-    
+
     // Solo mostrar resultados si hay algo escrito en el buscador
     if (!filterText.trim()) {
         restaurantsList.innerHTML = `
@@ -155,9 +155,9 @@ function renderRestaurants(filterText = '') {
 
     const filtered = adminData.restaurants.filter(r => {
         const q = filterText.toLowerCase();
-        return (r.name || '').toLowerCase().includes(q) || 
-               (r.location || '').toLowerCase().includes(q) ||
-               (r.id || '').toLowerCase().includes(q);
+        return (r.name || '').toLowerCase().includes(q) ||
+            (r.location || '').toLowerCase().includes(q) ||
+            (r.id || '').toLowerCase().includes(q);
     });
 
     restaurantCount.textContent = filtered.length;
@@ -433,7 +433,7 @@ function populateLinkSelectors() {
     // Restaurantes (Únicos y ordenados)
     const restoSelect = document.getElementById('link-restaurante');
     const fechaSelect = document.getElementById('link-fecha');
-    
+
     restoSelect.innerHTML = '<option value="" disabled selected>Selecciona restaurante</option>';
     fechaSelect.innerHTML = '<option value="" disabled selected>Elige fecha</option>';
     fechaSelect.disabled = true;
@@ -445,7 +445,7 @@ function populateLinkSelectors() {
             uniqueNames.push(r.name);
         }
     });
-    
+
     uniqueNames.forEach(name => {
         const opt = document.createElement('option');
         opt.value = name;
@@ -458,9 +458,9 @@ function populateLinkSelectors() {
         restoSelect.addEventListener('change', () => {
             const selectedName = restoSelect.value;
             fechaSelect.innerHTML = '<option value="" disabled selected>Elige fecha</option>';
-            
+
             const matches = adminData.restaurants.filter(r => r.name === selectedName);
-            
+
             if (matches.length > 0) {
                 matches.forEach(m => {
                     const opt = document.createElement('option');
@@ -621,7 +621,7 @@ function setupSmartPaste() {
     const sanitizePasteValue = (val) => {
         if (typeof val !== 'string') return String(val || '');
         // Eliminar posibles etiquetas HTML, scripts, iframes...
-        return val.replace(/<[^>]*>?/gm, '').trim(); 
+        return val.replace(/<[^>]*>?/gm, '').trim();
     };
 
     pasteArea.addEventListener('input', (e) => {

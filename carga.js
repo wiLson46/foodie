@@ -1,7 +1,7 @@
 /**
  * URL del Web App de Google Apps Script
  */
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwHxKLbn2z5Z_UWLbwQht6gz8ZdtplrJf5gG4w4EJp_GxfoZ7_H4T7g-5gZSACR5phA/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw6Vg9eGEYZPR6HgcGxfbRR1gU9QRUPtDP_GE9mteCO5WcFbLHHyYQGkcw_1uDRZ_CX/exec';
 
 // --- Estado global ---
 let appData = {
