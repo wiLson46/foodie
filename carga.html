@@ -272,6 +272,24 @@
             background: rgba(255, 145, 0, 0.1);
         }
 
+        /* Alignment for header icons */
+        .carga-header h1, .dynamic-fields-container h3 {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.8rem;
+        }
+
+        .dynamic-fields-container h3 {
+            justify-content: flex-start;
+        }
+
+        .carga-header h1 i, .dynamic-fields-container h3 i {
+            width: 28px;
+            height: 28px;
+            color: var(--gold);
+        }
+
     </style>
 </head>
 
@@ -304,7 +322,10 @@
                 <img src="./fotos/imagenes/logoB.png" alt="Comer.ar Logo" class="logo-img light-logo">
                 <img src="./fotos/imagenes/logoW.png" alt="Comer.ar Logo" class="logo-img dark-logo">
             </div>
-            <h1 style="font-family: var(--font-title); font-size: 2rem; margin-top: 1rem;">Carga de Reseña</h1>
+            <h1 style="font-family: var(--font-title); font-size: 2rem; margin-top: 1rem;">
+                <i data-lucide="clipboard-edit"></i>
+                Carga de Reseña
+            </h1>
             <p class="subtitle" id="status-text">Conectando con la base de datos...</p>
         </header>
 
@@ -336,7 +357,7 @@
                 <!-- Restaurant Selector -->
                 <div class="form-group">
                     <label for="restaurant-select" class="form-label">
-                        <i data-lucide="map-pin"></i>
+                        <i data-lucide="building-2"></i>
                         Restaurante
                     </label>
                     <select id="restaurant-select" class="form-select" disabled required>
@@ -348,7 +369,10 @@
 
                 <!-- Dynamic Score Fields -->
                 <div id="dynamic-fields" class="dynamic-fields-container">
-                    <h3 style="font-family: var(--font-title); margin-bottom: 1.5rem;">Tus Puntajes</h3>
+                    <h3 style="font-family: var(--font-title); margin-bottom: 1.5rem;">
+                        <i data-lucide="star"></i>
+                        Tus Puntajes
+                    </h3>
                     
                     <div class="form-group">
                         <label for="score-avg" class="form-label">

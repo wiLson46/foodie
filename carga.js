@@ -82,15 +82,31 @@ async function init() {
 
         if (appData.tokenInfo) {
             autoSelectFromToken(appData.tokenInfo);
+            statusText.textContent = "Datos sincronizados correctamente.";
+            statusText.style.color = "#2ecc71";
+        } else {
+            // No hay tokenInfo: el token no existe, expiró o ya fue usado
+            btnSubmit.disabled = true;
+            if (appToken) {
+                statusText.textContent = "❌ El link no es válido o ya fue usado.";
+            } else {
+                statusText.textContent = "❌ Acceso restringido. Se requiere un link de crítico.";
+            }
         }
 
-        statusText.textContent = "Datos sincronizados correctamente.";
-        statusText.style.color = "#2ecc71";
+        // Forzar renderizado de iconos
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
 
     } catch (error) {
         console.error("Error:", error);
         statusText.textContent = `❌ Error: ${error.message || "No se pudo conectar"}.`;
         statusText.style.color = "#e74c3c";
+        // Asegurar que todo esté deshabilitado en caso de error
+        criticSelect.disabled = true;
+        dateSelect.disabled = true;
+        btnSubmit.disabled = true;
     }
 }
 
@@ -168,7 +184,6 @@ function populateCritics() {
         opt.dataset.name = c.name;
         criticSelect.appendChild(opt);
     });
-    criticSelect.disabled = false;
 }
 
 function populateDates() {
@@ -179,7 +194,6 @@ function populateDates() {
         opt.textContent = d;
         dateSelect.appendChild(opt);
     });
-    dateSelect.disabled = false;
 }
 
 // --- Cambio de fecha → poblar restaurantes ---
