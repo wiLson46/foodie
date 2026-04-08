@@ -175,84 +175,88 @@ function renderRestaurants(filterText = '') {
 
     let html = '';
     filtered.forEach((r, idx) => {
-        const modalidad = (r.presencialDelivery || '').toUpperCase();
-        const isPresencial = modalidad === 'P' || modalidad === 'PRESENCIAL' || modalidad === '';
         const globalIdx = adminData.restaurants.indexOf(r);
-
-        html += `
-        <div class="restaurant-block" id="block-${globalIdx}">
-            <div class="restaurant-block-header">
-                <div class="restaurant-block-name">
-                    ${r.name || 'Sin nombre'}
-                </div>
-            </div>
-
-            <div class="restaurant-fields-grid">
-                <div class="admin-form-group">
-                    <label class="admin-label"><i data-lucide="hash"></i> ID</label>
-                    <input type="text" class="admin-input" id="edit-id-${globalIdx}" value="${escapeHtml(r.id || '')}" disabled style="background: rgba(0,0,0,0.05); font-weight: bold;">
-                </div>
-                <div class="admin-form-group">
-                    <label class="admin-label"><i data-lucide="store"></i> Nombre</label>
-                    <input type="text" class="admin-input" id="edit-name-${globalIdx}" value="${escapeHtml(r.name || '')}">
-                </div>
-                <div class="admin-form-group">
-                    <label class="admin-label"><i data-lucide="map-pin"></i> Ubicación</label>
-                    <input type="text" class="admin-input" id="edit-location-${globalIdx}" value="${escapeHtml(r.location || '')}">
-                </div>
-                <div class="admin-form-group field-full">
-                    <label class="admin-label"><i data-lucide="file-text"></i> Descripción</label>
-                    <textarea class="admin-textarea" id="edit-description-${globalIdx}">${escapeHtml(r.description || '')}</textarea>
-                </div>
-                <div class="admin-form-group">
-                    <label class="admin-label"><i data-lucide="calendar"></i> Fecha</label>
-                    <input type="text" class="admin-input" id="edit-fecha-${globalIdx}" value="${escapeHtml(r.fecha || '')}">
-                </div>
-                <div class="admin-form-group">
-                    <label class="admin-label"><i data-lucide="navigation"></i> Dirección</label>
-                    <input type="text" class="admin-input" id="edit-direccion-${globalIdx}" value="${escapeHtml(r.direccion || '')}">
-                </div>
-                <div class="admin-form-group">
-                    <label class="admin-label"><i data-lucide="phone"></i> Teléfono</label>
-                    <input type="text" class="admin-input" id="edit-telefono-${globalIdx}" value="${escapeHtml(r.telefono || '')}">
-                </div>
-                <div class="admin-form-group">
-                    <label class="admin-label"><i data-lucide="camera"></i> Instagram</label>
-                    <input type="text" class="admin-input" id="edit-instagram-${globalIdx}" value="${escapeHtml(r.instagram || '')}">
-                </div>
-                <div class="admin-form-group">
-                    <label class="admin-label"><i data-lucide="map"></i> Link Mapa</label>
-                    <input type="url" class="admin-input" id="edit-linkMapa-${globalIdx}" value="${escapeHtml(r.linkMapa || '')}">
-                </div>
-                <div class="admin-form-group">
-                    <label class="admin-label"><i data-lucide="truck"></i> Modalidad</label>
-                    <div class="radio-group">
-                        <div class="radio-option">
-                            <input type="radio" name="edit-modalidad-${globalIdx}" id="edit-modal-p-${globalIdx}" value="P" ${isPresencial ? 'checked' : ''}>
-                            <label for="edit-modal-p-${globalIdx}">🍽️ Presencial</label>
-                        </div>
-                        <div class="radio-option">
-                            <input type="radio" name="edit-modalidad-${globalIdx}" id="edit-modal-d-${globalIdx}" value="D" ${!isPresencial ? 'checked' : ''}>
-                            <label for="edit-modal-d-${globalIdx}">📦 Delivery</label>
-                        </div>
-                    </div>
-                </div>
-                <div class="admin-form-group">
-                    <label class="admin-label"><i data-lucide="shopping-bag"></i> Pedido por</label>
-                    <input type="text" class="admin-input" id="edit-pedidoPor-${globalIdx}" value="${escapeHtml(r.pedidoPor || '')}">
-                </div>
-            </div>
-
-            <button type="button" class="admin-btn btn-save" id="btn-save-${globalIdx}" onclick="saveRestaurant(${globalIdx})">
-                <span class="btn-label"><i data-lucide="save"></i> Guardar Cambios</span>
-                <div class="btn-spinner"></div>
-            </button>
-        </div>
-        `;
+        html += createRestaurantCard(r, globalIdx);
     });
 
     restaurantsList.innerHTML = html;
     lucide.createIcons();
+}
+
+function createRestaurantCard(r, globalIdx) {
+    const modalidad = (r.presencialDelivery || '').toUpperCase();
+    const isPresencial = modalidad === 'P' || modalidad === 'PRESENCIAL' || modalidad === '';
+
+    return `
+    <div class="restaurant-block" id="block-${globalIdx}">
+        <div class="restaurant-block-header">
+            <div class="restaurant-block-name">
+                ${r.name || 'Sin nombre'}
+            </div>
+        </div>
+
+        <div class="restaurant-fields-grid">
+            <div class="admin-form-group">
+                <label class="admin-label"><i data-lucide="hash"></i> ID</label>
+                <input type="text" class="admin-input" id="edit-id-${globalIdx}" value="${escapeHtml(r.id || '')}" disabled style="background: rgba(0,0,0,0.05); font-weight: bold;">
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label"><i data-lucide="store"></i> Nombre</label>
+                <input type="text" class="admin-input" id="edit-name-${globalIdx}" value="${escapeHtml(r.name || '')}">
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label"><i data-lucide="map-pin"></i> Ubicación</label>
+                <input type="text" class="admin-input" id="edit-location-${globalIdx}" value="${escapeHtml(r.location || '')}">
+            </div>
+            <div class="admin-form-group field-full">
+                <label class="admin-label"><i data-lucide="file-text"></i> Descripción</label>
+                <textarea class="admin-textarea" id="edit-description-${globalIdx}">${escapeHtml(r.description || '')}</textarea>
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label"><i data-lucide="calendar"></i> Fecha</label>
+                <input type="text" class="admin-input" id="edit-fecha-${globalIdx}" value="${escapeHtml(r.fecha || '')}">
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label"><i data-lucide="navigation"></i> Dirección</label>
+                <input type="text" class="admin-input" id="edit-direccion-${globalIdx}" value="${escapeHtml(r.direccion || '')}">
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label"><i data-lucide="phone"></i> Teléfono</label>
+                <input type="text" class="admin-input" id="edit-telefono-${globalIdx}" value="${escapeHtml(r.telefono || '')}">
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label"><i data-lucide="camera"></i> Instagram</label>
+                <input type="text" class="admin-input" id="edit-instagram-${globalIdx}" value="${escapeHtml(r.instagram || '')}">
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label"><i data-lucide="map"></i> Link Mapa</label>
+                <input type="url" class="admin-input" id="edit-linkMapa-${globalIdx}" value="${escapeHtml(r.linkMapa || '')}">
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label"><i data-lucide="truck"></i> Modalidad</label>
+                <div class="radio-group">
+                    <div class="radio-option">
+                        <input type="radio" name="edit-modalidad-${globalIdx}" id="edit-modal-p-${globalIdx}" value="P" ${isPresencial ? 'checked' : ''}>
+                        <label for="edit-modal-p-${globalIdx}">🍽️ Presencial</label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" name="edit-modalidad-${globalIdx}" id="edit-modal-d-${globalIdx}" value="D" ${!isPresencial ? 'checked' : ''}>
+                        <label for="edit-modal-d-${globalIdx}">📦 Delivery</label>
+                    </div>
+                </div>
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label"><i data-lucide="shopping-bag"></i> Pedido por</label>
+                <input type="text" class="admin-input" id="edit-pedidoPor-${globalIdx}" value="${escapeHtml(r.pedidoPor || '')}">
+            </div>
+        </div>
+
+        <button type="button" class="admin-btn btn-save" id="btn-save-${globalIdx}" onclick="saveRestaurant(${globalIdx})">
+            <span class="btn-label"><i data-lucide="save"></i> Guardar Cambios</span>
+            <div class="btn-spinner"></div>
+        </button>
+    </div>
+    `;
 }
 
 // =============================================

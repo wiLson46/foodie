@@ -81,16 +81,12 @@ function fetchSheet(url) {
 /**
  * Fetches all data once and initializes the view
  */
-function fetchData() {
-    const promises = [
-        fetchSheet(CONFIG.mainDataSheet)
-    ];
-
+async function fetchData() {
     // Show loading state
     rankingList.innerHTML = '<div class="loader">Cargando la selección...</div>';
 
-    Promise.all(promises).then(results => {
-        const mainData = results[0];
+    try {
+        const mainData = await fetchSheet(CONFIG.mainDataSheet);
 
         if (isValidData(mainData)) {
             const hasName = Object.keys(mainData[0]).some(k => k === 'name' || k === 'nombre');
@@ -138,20 +134,16 @@ function fetchData() {
         }
 
         console.log("Datos cargados:", { mode: currentMode, allRestaurants });
-
-        // Filter by the current mode immediately
-        filterByMode();
-
-        // Handle hash navigation after data is loaded
-        handleHashChange();
-    }).catch(err => {
+    } catch (err) {
         console.error("Error loading data:", err);
         allRestaurants = MOCK_DATA.map(m => ({ ...m, presencialDelivery: 'P', critics: {} }));
-        filterByMode();
+    }
 
-        // Handle hash navigation even with mock data
-        handleHashChange();
-    });
+    // Filter by the current mode immediately
+    filterByMode();
+
+    // Handle hash navigation after data is loaded
+    handleHashChange();
 }
 
 /**

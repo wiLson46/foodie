@@ -158,8 +158,8 @@ function updateAverage() {
     const checkAndFix = (input) => {
         let val = parseFloat(input.value);
         if (isNaN(val)) return NaN;
-        if (val < 0) { input.value = 0; val = 0; }
-        if (val > 10) { input.value = 10; val = 10; }
+        val = Math.max(0, Math.min(10, val));
+        input.value = val;
         return val;
     };
 
@@ -333,20 +333,8 @@ function resetForm() {
         window.location.href = 'index.html';
         return;
     }
+    // Si hubo un error (no es success), simplemente ocultamos el modal.
+    // Como los campos están bloqueados por token, borrarlos empêchería 
+    // volver a intentar el submit con la misma data.
     resultModal.classList.add('hidden');
-
-    // Reset todos los selectors e inputs
-    criticSelect.selectedIndex = 0;
-    dateSelect.selectedIndex = 0;
-    restSelect.innerHTML = '<option value="" disabled selected>Selecciona primero una fecha</option>';
-    restSelect.disabled = true;
-
-    fieldContainer.classList.remove('show');
-    fieldContainer.style.display = 'none';
-    badgeType.style.display = 'none';
-
-    inAvg.value = '';
-    in1.value = '';
-    in2.value = '';
-    in3.value = '';
 }
