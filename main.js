@@ -2,7 +2,6 @@
 // --- CONFIG & DATA ---
 const CONFIG = {
     mainDataSheet: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv',
-    peopleScoreSheet: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1841885372',
     tabsData: {
         presencial: ['ranking', 'map'],
         delivery: ['ranking']
@@ -20,7 +19,7 @@ const MOCK_DATA = [
 let allRestaurants = []; // Stores all fetched restaurants
 let restaurants = []; // Restaurants filtered by currentMode
 let filteredRestaurants = []; // Restaurants filtered by both mode and location
-let peopleScores = []; // New state for people's scores
+
 let currentSort = 'score'; // Default sort order
 let currentMode = 'presencial'; // 'presencial' | 'delivery'
 
@@ -84,8 +83,7 @@ function fetchSheet(url) {
  */
 function fetchData() {
     const promises = [
-        fetchSheet(CONFIG.mainDataSheet),
-        fetchSheet(CONFIG.peopleScoreSheet)
+        fetchSheet(CONFIG.mainDataSheet)
     ];
 
     // Show loading state
@@ -93,17 +91,6 @@ function fetchData() {
 
     Promise.all(promises).then(results => {
         const mainData = results[0];
-        const peopleData = results[1];
-
-        // Parse people scores
-        if (isValidData(peopleData)) {
-            peopleScores = peopleData.map(row => ({
-                name: Object.values(row)[0] || '', // Column A
-                score: Object.values(row)[1] || '' // Column B
-            }));
-        } else {
-            peopleScores = [];
-        }
 
         if (isValidData(mainData)) {
             const hasName = Object.keys(mainData[0]).some(k => k === 'name' || k === 'nombre');
@@ -150,7 +137,7 @@ function fetchData() {
             allRestaurants = MOCK_DATA.map(m => ({ ...m, presencialDelivery: 'P', critics: {} }));
         }
 
-        console.log("Datos cargados:", { mode: currentMode, allRestaurants, peopleScores });
+        console.log("Datos cargados:", { mode: currentMode, allRestaurants });
 
         // Filter by the current mode immediately
         filterByMode();
@@ -423,20 +410,6 @@ function findRestaurantBySlug(slug) {
 }
 
 /**
- * Finds people's score for a restaurant
- */
-function getPeopleScore(restaurantName) {
-    if (!peopleScores || peopleScores.length === 0) return '-.-';
-
-    // Normalize logic similar to critics search
-    const found = peopleScores.find(p =>
-        p.name && p.name.toLowerCase().trim() === restaurantName.toLowerCase().trim()
-    );
-
-    return (found && found.score) ? found.score : '-.-';
-}
-
-/**
  * Shows restaurant detail view
  */
 function showDetail(res, updateHash = true) {
@@ -493,16 +466,6 @@ function showDetail(res, updateHash = true) {
                         <div class="score-value">${rating}</div>
                     </div>
 
-                    <!-- People's Score -->
-                    ${(() => {
-            const pScore = getPeopleScore(res.name);
-            return (pScore && pScore !== '-.-') ? `
-                            <div class="detail-score-box people-score-box" onclick="openSurveyModal()">
-                                <div class="score-label">Puntaje de la gente</div>
-                                <div class="score-value">${pScore}</div>
-                            </div>
-                        ` : '';
-        })()}
                 </div>
 
                 <!-- Location -->
@@ -811,43 +774,6 @@ window.closeLightbox = function () {
             if (lightboxImg) lightboxImg.src = '';
         }, 300);
     }
-};
-
-// --- SURVEY MODAL ---
-
-window.openSurveyModal = function () {
-    const modal = document.getElementById('survey-modal');
-    const container = document.getElementById('survey-container');
-
-    if (!modal || !container) return;
-
-    // Detect device for iframe sizing
-    const isMobile = window.innerWidth <= 768;
-    const width = isMobile ? "300" : "640";
-    const height = isMobile ? "600" : "946";
-
-    container.innerHTML = `
-        <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSccteyXdae90sOgyONjnyXqJCjRWk211Vjk89aMDR0_3qyr-A/viewform?embedded=true" 
-        width="${width}" height="${height}" frameborder="0" marginheight="0" marginwidth="0">Loading...</iframe>
-   `;
-
-    modal.classList.remove('hidden');
-    // Force reflow
-    void modal.offsetWidth;
-    modal.classList.add('visible');
-    document.body.style.overflow = 'hidden';
-};
-
-window.closeSurveyModal = function () {
-    const modal = document.getElementById('survey-modal');
-    if (!modal) return;
-
-    modal.classList.remove('visible');
-    setTimeout(() => {
-        modal.classList.add('hidden');
-        document.getElementById('survey-container').innerHTML = '';
-        document.body.style.overflow = '';
-    }, 300);
 };
 
 // Removed duplicated initApp and DOMContentLoaded handler

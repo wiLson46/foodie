@@ -80,9 +80,6 @@
         }
 
         .section-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -90,19 +87,15 @@
         }
 
         .section-icon i {
-            width: 20px;
-            height: 20px;
-            color: #fff;
+            width: 28px;
+            height: 28px;
+            color: var(--gold);
         }
-
-        .section-icon-restaurants { background: linear-gradient(135deg, #667eea, #764ba2); }
-        .section-icon-add { background: linear-gradient(135deg, #2ecc71, #27ae60); }
-        .section-icon-links { background: linear-gradient(135deg, #f39c12, #e67e22); }
 
         .section-title {
             font-family: var(--font-title);
             font-weight: 700;
-            font-size: 1.1rem;
+            font-size: 1.17rem;
             color: var(--text-main);
         }
 
@@ -641,12 +634,17 @@
         .admin-header h1 {
             font-family: var(--font-title);
             font-size: 2rem;
-            font-weight: 800;
             margin-top: 1rem;
-            background: linear-gradient(135deg, var(--text-main), var(--gold));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.8rem;
+        }
+
+        .admin-header h1 i {
+            width: 28px;
+            height: 28px;
+            color: var(--gold);
         }
 
         /* --- Restaurant count badge --- */
@@ -698,7 +696,10 @@
                 <img src="./fotos/imagenes/logoB.png" alt="Comer.ar Logo" class="logo-img light-logo">
                 <img src="./fotos/imagenes/logoW.png" alt="Comer.ar Logo" class="logo-img dark-logo">
             </div>
-            <h1>Panel de Administración</h1>
+            <h1>
+                <i data-lucide="layout-dashboard"></i>
+                Panel de Administración
+            </h1>
             <p class="subtitle" id="status-text">Conectando con la base de datos...</p>
         </header>
 
@@ -719,7 +720,7 @@
                 <div class="admin-section" id="section-add">
                     <div class="section-header" onclick="toggleSection('add')">
                         <div class="section-header-left">
-                            <div class="section-icon section-icon-add">
+                            <div class="section-icon">
                                 <i data-lucide="plus-circle"></i>
                             </div>
                             <div>
@@ -732,7 +733,7 @@
                     <div class="section-body" id="body-add">
                         <form id="new-restaurant-form" onsubmit="return false;">
                             <div class="admin-form-group smart-paste-container" style="margin-bottom: 1.5rem; background: rgba(102, 126, 234, 0.05); border: 2px dashed rgba(102, 126, 234, 0.3); padding: 1rem; border-radius: 14px;">
-                                <label class="admin-label" style="color: #667eea; margin-bottom: 0.5rem;"><i data-lucide="bot"></i> Asistente de Carga (Opcional)</label>
+                                <label class="admin-label" style="margin-bottom: 0.5rem;"><i data-lucide="bot"></i> Asistente de Carga (Opcional)</label>
                                 <textarea class="admin-textarea" id="smart-paste" placeholder="Pegá aquí el JSON generado por Gemini u otra IA para auto-completar el formulario..." style="min-height: 70px; background: rgba(255,255,255,0.5);"></textarea>
                             </div>
 
@@ -805,7 +806,7 @@
                 <div class="admin-section" id="section-links">
                     <div class="section-header" onclick="toggleSection('links')">
                         <div class="section-header-left">
-                            <div class="section-icon section-icon-links">
+                            <div class="section-icon">
                                 <i data-lucide="link-2"></i>
                             </div>
                             <div>
@@ -859,7 +860,7 @@
                 <div class="admin-section" id="section-restaurants">
                     <div class="section-header" onclick="toggleSection('restaurants')">
                         <div class="section-header-left">
-                            <div class="section-icon section-icon-restaurants">
+                            <div class="section-icon">
                                 <i data-lucide="list"></i>
                             </div>
                             <div>
