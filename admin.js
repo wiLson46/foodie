@@ -184,7 +184,6 @@ function renderRestaurants(filterText = '') {
             <div class="restaurant-block-header">
                 <div class="restaurant-block-name">
                     ${r.name || 'Sin nombre'}
-                    <span class="row-badge">Fila ${r.rowIndex}</span>
                 </div>
             </div>
 
