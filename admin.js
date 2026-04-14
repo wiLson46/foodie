@@ -8,7 +8,7 @@
 // =============================================
 // CONFIGURACIÓN
 // =============================================
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw6Vg9eGEYZPR6HgcGxfbRR1gU9QRUPtDP_GE9mteCO5WcFbLHHyYQGkcw_1uDRZ_CX/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxT0G-CwgaZgAZsKXdNgrMm5Bffl77ItglK_CtJyVYX1_OWeeI7Ze0eue1eO4fsujFw/exec';
 
 // =============================================
 // ESTADO GLOBAL
@@ -95,6 +95,9 @@ async function initAdmin() {
 
         // Re-initialize lucide icons for dynamic content
         lucide.createIcons();
+
+        // Load stats in parallel (non-blocking)
+        loadStats();
 
     } catch (error) {
         console.error('Error loading admin data:', error);
@@ -673,4 +676,234 @@ function setupSmartPaste() {
             // Falla de parseo silenciada (el usuario aún está pegando/escribiendo o pego mal)
         }
     });
+}
+
+// =============================================
+// ESTADÍSTICAS
+// =============================================
+let statsChart = null;
+let statsData = null;
+let currentStatsMode = 'daily';
+
+async function loadStats() {
+    const statsLoader = document.getElementById('stats-loader');
+    const statsContent = document.getElementById('stats-content');
+
+    try {
+        const res = await fetch(SCRIPT_URL + '?action=getStats');
+        const json = await res.json();
+
+        if (json.error) throw new Error(json.error);
+
+        statsData = json;
+        console.log('Stats loaded:', statsData);
+
+        // Calculate total
+        const totalViews = (statsData.dailyViews || []).reduce((sum, d) => sum + d.count, 0);
+        document.getElementById('stats-total-count').textContent = totalViews.toLocaleString('es-AR');
+
+        // Render chart and top
+        renderPageViewsChart('daily');
+        renderRestaurantTop(statsData.restaurantViews || []);
+
+        // Show content
+        if (statsLoader) statsLoader.style.display = 'none';
+        if (statsContent) statsContent.style.display = 'block';
+
+        lucide.createIcons();
+
+    } catch (error) {
+        console.error('Error loading stats:', error);
+        if (statsLoader) {
+            statsLoader.innerHTML = `
+                <div class="stats-empty">
+                    <i data-lucide="bar-chart-3"></i>
+                    <p>No se pudieron cargar las estadísticas</p>
+                    <p style="font-size: 0.8rem; margin-top: 0.5rem; opacity: 0.6;">${error.message}</p>
+                </div>
+            `;
+            lucide.createIcons();
+        }
+    }
+}
+
+function renderPageViewsChart(mode) {
+    const ctx = document.getElementById('stats-chart');
+    if (!ctx || !statsData) return;
+
+    // Destroy previous chart
+    if (statsChart) {
+        statsChart.destroy();
+        statsChart = null;
+    }
+
+    let labels, data, xLabel;
+
+    if (mode === 'monthly') {
+        const monthlyData = statsData.monthlyViews || [];
+        labels = monthlyData.map(d => {
+            const [year, month] = d.month.split('-');
+            const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+            return `${monthNames[parseInt(month) - 1]} ${year}`;
+        });
+        data = monthlyData.map(d => d.count);
+        xLabel = 'Mes';
+    } else {
+        const dailyData = statsData.dailyViews || [];
+        labels = dailyData.map(d => {
+            const [y, m, day] = d.date.split('-');
+            return `${day}/${m}`;
+        });
+        data = dailyData.map(d => d.count);
+        xLabel = 'Día';
+    }
+
+    if (labels.length === 0) {
+        ctx.parentElement.innerHTML = `
+            <div class="stats-empty">
+                <i data-lucide="bar-chart-3"></i>
+                <p>Aún no hay datos de visitas</p>
+            </div>
+        `;
+        lucide.createIcons();
+        return;
+    }
+
+    // Detect dark mode for chart colors
+    const isDark = document.body.classList.contains('dark-mode');
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
+    const textColor = isDark ? '#AAAAAA' : '#555555';
+    const goldColor = '#FF9100';
+    const goldBg = isDark ? 'rgba(255, 145, 0, 0.25)' : 'rgba(255, 145, 0, 0.15)';
+
+    statsChart = new Chart(ctx, {
+        type: mode === 'monthly' ? 'bar' : 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Visitas',
+                data: data,
+                borderColor: goldColor,
+                backgroundColor: mode === 'monthly' ? goldBg : goldBg,
+                borderWidth: mode === 'monthly' ? 0 : 2.5,
+                fill: true,
+                tension: 0.4,
+                pointRadius: mode === 'monthly' ? 0 : 4,
+                pointBackgroundColor: goldColor,
+                pointBorderColor: isDark ? '#1E1E1E' : '#FFFFFF',
+                pointBorderWidth: 2,
+                pointHoverRadius: 6,
+                borderRadius: mode === 'monthly' ? 6 : 0,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index',
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: isDark ? '#333' : '#fff',
+                    titleColor: isDark ? '#eee' : '#111',
+                    bodyColor: isDark ? '#ccc' : '#555',
+                    borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                    borderWidth: 1,
+                    cornerRadius: 8,
+                    padding: 10,
+                    titleFont: { family: "'Outfit', sans-serif", weight: '700' },
+                    bodyFont: { family: "'DM Sans', sans-serif" },
+                    callbacks: {
+                        label: function (context) {
+                            return `  ${context.parsed.y} visitas`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        color: textColor,
+                        font: { family: "'DM Sans', sans-serif", size: 11 },
+                        maxRotation: 45,
+                        maxTicksLimit: mode === 'monthly' ? 12 : 15
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: gridColor },
+                    ticks: {
+                        color: textColor,
+                        font: { family: "'DM Sans', sans-serif", size: 11 },
+                        precision: 0
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderRestaurantTop(restaurantViews) {
+    const container = document.getElementById('stats-top-restaurants');
+    if (!container) return;
+
+    if (!restaurantViews || restaurantViews.length === 0) {
+        container.innerHTML = `
+            <div class="stats-empty">
+                <i data-lucide="eye-off"></i>
+                <p>Aún no hay datos de restaurantes visitados</p>
+            </div>
+        `;
+        lucide.createIcons();
+        return;
+    }
+
+    const maxCount = restaurantViews[0].count;
+
+    let html = '<div class="top-restaurant-list">';
+    restaurantViews.forEach((item, index) => {
+        const rankNum = index + 1;
+        let rankClass = '';
+        if (rankNum === 1) rankClass = 'gold';
+        else if (rankNum === 2) rankClass = 'silver';
+        else if (rankNum === 3) rankClass = 'bronze';
+
+        const percentage = Math.round((item.count / maxCount) * 100);
+
+        html += `
+            <div class="top-restaurant-item">
+                <div class="top-rank ${rankClass}">${rankNum}</div>
+                <div class="top-info">
+                    <div class="top-name">${escapeHtml(item.name)}</div>
+                    <div class="top-bar-container">
+                        <div class="top-bar" style="width: ${percentage}%"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="top-count">${item.count}</div>
+                    <div class="top-count-label">visitas</div>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+
+    container.innerHTML = html;
+}
+
+function switchStatsMode(mode) {
+    currentStatsMode = mode;
+
+    // Update toggle buttons
+    document.querySelectorAll('.stats-toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-stats-mode') === mode);
+    });
+
+    // Re-render chart
+    renderPageViewsChart(mode);
 }

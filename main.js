@@ -8,6 +8,25 @@ const CONFIG = {
     }
 };
 
+// --- TRACKING ---
+const TRACKING_URL = 'https://script.google.com/macros/s/AKfycbxT0G-CwgaZgAZsKXdNgrMm5Bffl77ItglK_CtJyVYX1_OWeeI7Ze0eue1eO4fsujFw/exec';
+
+/**
+ * Sends a tracking event silently (fire-and-forget)
+ */
+function trackEvent(event, restaurant) {
+    try {
+        const body = { action: 'trackEvent', event };
+        if (restaurant) body.restaurant = restaurant;
+        fetch(TRACKING_URL, {
+            method: 'POST',
+            body: JSON.stringify(body)
+        }).catch(() => { }); // Silenciar errores de tracking
+    } catch (e) {
+        // Never break the app for tracking
+    }
+}
+
 const MOCK_DATA = [
     { rank: 1, name: "Pujol", rating: "9.8", description: "Cocina mexicana de autor en las manos de Enrique Olvera.", location: "CDMX, México" },
     { rank: 2, name: "Central", rating: "9.7", description: "Exploración de ecosistemas peruanos por Virgilio Martínez.", location: "Lima, Perú" },
@@ -407,6 +426,9 @@ function findRestaurantBySlug(slug) {
 function showDetail(res, updateHash = true) {
     console.log("--- DEBUG DETALLE ---");
     console.log("Datos del restaurante:", res);
+
+    // Track detail view
+    trackEvent('detail_view', res.name);
 
     // Update URL hash if needed
     if (updateHash) {
@@ -926,6 +948,9 @@ function initApp() {
 
     // Fetch data
     fetchData();
+
+    // Track page view (fire-and-forget)
+    trackEvent('pageview');
 }
 
 // Single DOMContentLoaded listener

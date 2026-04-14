@@ -19,6 +19,7 @@
 
     <!-- Libraries -->
     <script src="https://unpkg.com/lucide@latest" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
 
     <style>
         /* ========================================
@@ -661,6 +662,210 @@
         .dark-mode .count-badge {
             background: rgba(102, 126, 234, 0.2);
         }
+
+        /* ========================================
+           STATS SECTION
+           ======================================== */
+        .stats-toggle {
+            display: flex;
+            justify-content: center;
+            gap: 0.4rem;
+            margin-bottom: 1.5rem;
+            background: rgba(0, 0, 0, 0.04);
+            padding: 0.3rem;
+            border-radius: 10px;
+        }
+
+        .dark-mode .stats-toggle {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .stats-toggle-btn {
+            flex: 1;
+            padding: 0.55rem 1rem;
+            border: none;
+            border-radius: 8px;
+            font-family: var(--font-title);
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: transparent;
+            color: var(--text-muted);
+        }
+
+        .stats-toggle-btn:hover {
+            color: var(--text-main);
+        }
+
+        .stats-toggle-btn.active {
+            background: var(--card-bg);
+            color: var(--text-main);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .dark-mode .stats-toggle-btn.active {
+            background: #333;
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .stats-chart-container {
+            position: relative;
+            width: 100%;
+            max-height: 350px;
+            margin-bottom: 1rem;
+            background: var(--bg);
+            border-radius: 14px;
+            padding: 1rem;
+            border: 1px solid var(--border);
+        }
+
+        .stats-total-badge {
+            text-align: center;
+            font-family: var(--font-body);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .stats-total-badge strong {
+            font-family: var(--font-title);
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--gold);
+            display: block;
+            margin-top: 0.25rem;
+        }
+
+        .stats-subsection-title {
+            font-family: var(--font-title);
+            font-weight: 700;
+            font-size: 1.05rem;
+            color: var(--text-main);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .stats-subsection-title i {
+            width: 20px;
+            height: 20px;
+            color: var(--gold);
+        }
+
+        /* Top Restaurants List */
+        .top-restaurant-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+        }
+
+        .top-restaurant-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            transition: all 0.25s ease;
+        }
+
+        .top-restaurant-item:hover {
+            border-color: rgba(255, 145, 0, 0.3);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+        }
+
+        .dark-mode .top-restaurant-item:hover {
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .top-rank {
+            font-family: var(--font-title);
+            font-weight: 800;
+            font-size: 1.3rem;
+            color: var(--text-muted);
+            min-width: 30px;
+            text-align: center;
+        }
+
+        .top-rank.gold { color: #FF9100; }
+        .top-rank.silver { color: #AAA; }
+        .top-rank.bronze { color: #CD7F32; }
+
+        .top-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .top-name {
+            font-family: var(--font-title);
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .top-bar-container {
+            height: 6px;
+            background: rgba(0, 0, 0, 0.06);
+            border-radius: 3px;
+            margin-top: 0.35rem;
+            overflow: hidden;
+        }
+
+        .dark-mode .top-bar-container {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .top-bar {
+            height: 100%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, #FF9100, #ffb74d);
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .top-count {
+            font-family: var(--font-title);
+            font-weight: 800;
+            font-size: 1.1rem;
+            color: var(--text-main);
+            min-width: 40px;
+            text-align: right;
+        }
+
+        .top-count-label {
+            font-family: var(--font-body);
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            text-align: right;
+            letter-spacing: 0.02em;
+        }
+
+        .stats-empty {
+            text-align: center;
+            padding: 2.5rem 1rem;
+            color: var(--text-muted);
+        }
+
+        .stats-empty i {
+            width: 42px;
+            height: 42px;
+            margin-bottom: 0.75rem;
+            opacity: 0.25;
+        }
+
+        .stats-divider {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 1.5rem 0;
+        }
     </style>
 </head>
 
@@ -713,6 +918,65 @@
 
             <!-- Sections (hidden until loaded) -->
             <div id="admin-content" style="display: none;">
+
+                <!-- =======================================
+                     SECTION: Estadísticas
+                     ======================================= -->
+                <div class="admin-section" id="section-stats">
+                    <div class="section-header" onclick="toggleSection('stats')">
+                        <div class="section-header-left">
+                            <div class="section-icon">
+                                <i data-lucide="bar-chart-3"></i>
+                            </div>
+                            <div>
+                                <div class="section-title">Estadísticas</div>
+                                <div class="section-subtitle">Visitas a la página y restaurantes más vistos</div>
+                            </div>
+                        </div>
+                        <i data-lucide="chevron-down" class="section-chevron" id="chevron-stats"></i>
+                    </div>
+                    <div class="section-body" id="body-stats">
+                        <!-- Loading state for stats -->
+                        <div id="stats-loader" class="admin-loader" style="padding: 2rem;">
+                            <div class="spinner-large"></div>
+                            <p>Cargando estadísticas...</p>
+                        </div>
+
+                        <div id="stats-content" style="display: none;">
+                            <!-- Total visits badge -->
+                            <div class="stats-total-badge">
+                                Visitas totales a la página
+                                <strong id="stats-total-count">0</strong>
+                            </div>
+
+                            <!-- Chart toggle -->
+                            <div class="stats-toggle">
+                                <button class="stats-toggle-btn active" data-stats-mode="daily" onclick="switchStatsMode('daily')">
+                                    📅 Día por día
+                                </button>
+                                <button class="stats-toggle-btn" data-stats-mode="monthly" onclick="switchStatsMode('monthly')">
+                                    📆 Mes por mes
+                                </button>
+                            </div>
+
+                            <!-- Chart -->
+                            <div class="stats-chart-container">
+                                <canvas id="stats-chart"></canvas>
+                            </div>
+
+                            <hr class="stats-divider">
+
+                            <!-- Top Restaurants -->
+                            <div class="stats-subsection-title">
+                                <i data-lucide="trophy"></i>
+                                Top Restaurantes más visitados
+                            </div>
+                            <div id="stats-top-restaurants">
+                                <!-- Dynamically populated -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- =======================================
                      SECTION B: Nuevo Restaurante

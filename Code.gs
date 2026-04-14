@@ -11,6 +11,7 @@
 
 var SHEET_NAME = 'mainTable';
 var LINKS_SHEET_NAME = 'links';
+var STATS_SHEET_NAME = 'stats';
 
 // =============================================
 // CAMPOS BASE de cada restaurante (columnas A-M aprox.)
@@ -34,6 +35,10 @@ function doGet(e) {
 
     if (action === 'admin') {
       return sendJson(getAdminData());
+    }
+
+    if (action === 'getStats') {
+      return sendJson(getStats());
     }
 
     // --- Flujo original: datos para index.html / carga.html ---
@@ -60,6 +65,8 @@ function doPost(e) {
         return sendJson(addRestaurant(postData));
       case 'generateToken':
         return sendJson(generateToken(postData));
+      case 'trackEvent':
+        return sendJson(trackEvent(postData));
       case 'submitReview':
       default:
         return sendJson(handleReviewSubmit(postData));
@@ -595,5 +602,122 @@ function generateToken(postData) {
     token: token,
     url: fullUrl,
     message: "Link generado para " + critico + " — " + restaurante + " (" + fecha + ")"
+  };
+}
+
+// =============================================
+// STATS: Obtener o crear la pestaña de estadísticas
+// =============================================
+function getOrCreateStatsSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(STATS_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(STATS_SHEET_NAME);
+    sheet.getRange(1, 1, 1, 3).setValues([
+      ['timestamp', 'event', 'restaurant']
+    ]);
+    sheet.getRange(1, 1, 1, 3).setFontWeight('bold');
+  }
+  return sheet;
+}
+
+// =============================================
+// STATS: Registrar un evento de tracking
+// =============================================
+function trackEvent(postData) {
+  var eventType = String(postData.event || '').trim();
+  if (!eventType) {
+    return { success: false, message: 'Tipo de evento requerido.' };
+  }
+
+  // Solo aceptar eventos conocidos
+  if (eventType !== 'pageview' && eventType !== 'detail_view') {
+    return { success: false, message: 'Tipo de evento no válido.' };
+  }
+
+  var restaurant = String(postData.restaurant || '').trim();
+  var timestamp = new Date().toISOString();
+
+  var sheet = getOrCreateStatsSheet();
+  sheet.appendRow([timestamp, eventType, restaurant]);
+
+  return { success: true };
+}
+
+// =============================================
+// STATS: Obtener datos agregados de estadísticas
+// =============================================
+function getStats() {
+  var sheet;
+  try {
+    sheet = getOrCreateStatsSheet();
+  } catch (e) {
+    return { success: true, dailyViews: [], monthlyViews: [], restaurantViews: [] };
+  }
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    return { success: true, dailyViews: [], monthlyViews: [], restaurantViews: [] };
+  }
+
+  var data = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+
+  // Agrupar pageviews por día y mes
+  var dailyMap = {};
+  var monthlyMap = {};
+  var restaurantMap = {};
+
+  for (var i = 0; i < data.length; i++) {
+    var ts = data[i][0];
+    var event = String(data[i][1]).trim();
+    var restName = String(data[i][2]).trim();
+
+    var d;
+    if (ts instanceof Date) {
+      d = ts;
+    } else {
+      d = new Date(String(ts));
+    }
+
+    if (isNaN(d.getTime())) continue;
+
+    // Formato día: YYYY-MM-DD
+    var dayKey = d.getFullYear() + '-' +
+      ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+      ('0' + d.getDate()).slice(-2);
+
+    // Formato mes: YYYY-MM
+    var monthKey = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+
+    if (event === 'pageview') {
+      dailyMap[dayKey] = (dailyMap[dayKey] || 0) + 1;
+      monthlyMap[monthKey] = (monthlyMap[monthKey] || 0) + 1;
+    }
+
+    if (event === 'detail_view' && restName) {
+      restaurantMap[restName] = (restaurantMap[restName] || 0) + 1;
+    }
+  }
+
+  // Convertir a arrays ordenados
+  var dailyViews = Object.keys(dailyMap).sort().map(function(k) {
+    return { date: k, count: dailyMap[k] };
+  });
+
+  var monthlyViews = Object.keys(monthlyMap).sort().map(function(k) {
+    return { month: k, count: monthlyMap[k] };
+  });
+
+  var restaurantViews = Object.keys(restaurantMap).map(function(k) {
+    return { name: k, count: restaurantMap[k] };
+  }).sort(function(a, b) {
+    return b.count - a.count;
+  });
+
+  return {
+    success: true,
+    dailyViews: dailyViews,
+    monthlyViews: monthlyViews,
+    restaurantViews: restaurantViews
   };
 }
