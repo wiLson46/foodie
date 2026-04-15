@@ -8,7 +8,7 @@
 // =============================================
 // CONFIGURACIÓN
 // =============================================
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxT0G-CwgaZgAZsKXdNgrMm5Bffl77ItglK_CtJyVYX1_OWeeI7Ze0eue1eO4fsujFw/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzRRUX6gcOh4gNMxrYUBKTD9eQ9gmkFigLcPHPNBo5c8BtqgRLlww8mo_UvpW2rieNY/exec';
 
 // =============================================
 // ESTADO GLOBAL
@@ -46,8 +46,11 @@ async function initAdmin() {
     }
 
     try {
+        console.log('[Admin] Cargando datos desde:', SCRIPT_URL + '?action=admin');
         const res = await fetch(SCRIPT_URL + '?action=admin');
+        console.log('[Admin] Respuesta del servidor:', res.status, res.statusText);
         const json = await res.json();
+        console.log('[Admin] JSON recibido, keys:', Object.keys(json));
 
         if (json.error) throw new Error(json.error);
 
@@ -100,7 +103,8 @@ async function initAdmin() {
         loadStats();
 
     } catch (error) {
-        console.error('Error loading admin data:', error);
+        console.error('[Admin] Error cargando datos del admin:', error);
+        console.error('[Admin] Stack:', error.stack);
         statusText.textContent = `❌ Error: ${error.message}`;
         statusText.style.color = '#e74c3c';
         adminLoader.innerHTML = `
@@ -123,6 +127,18 @@ function toggleSection(name) {
     body.classList.toggle('open');
     chevron.classList.toggle('open');
     header.classList.toggle('open');
+
+    // When opening the stats section, render or resize the chart
+    if (name === 'stats' && body.classList.contains('open')) {
+        setTimeout(() => {
+            if (statsChart) {
+                statsChart.resize();
+            } else if (statsData) {
+                // Chart wasn't rendered yet (section was collapsed during load)
+                renderPageViewsChart(currentStatsMode);
+            }
+        }, 150);
+    }
 }
 
 // =============================================
@@ -303,6 +319,7 @@ async function saveRestaurant(idx) {
     }
 
     try {
+        console.log('[Admin] Guardando restaurante idx:', idx, 'data:', data);
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
@@ -312,7 +329,9 @@ async function saveRestaurant(idx) {
             })
         });
 
+        console.log('[Admin] Respuesta guardar:', res.status, res.statusText);
         const result = await res.json();
+        console.log('[Admin] Resultado guardar:', result);
 
         if (result.success) {
             // Actualizar datos locales
@@ -330,7 +349,8 @@ async function saveRestaurant(idx) {
         }
 
     } catch (error) {
-        console.error('Error saving restaurant:', error);
+        console.error('[Admin] Error guardando restaurante:', error);
+        console.error('[Admin] Stack:', error.stack);
         showToast(`❌ Error de conexión: ${error.message}`, 'error');
     } finally {
         setButtonLoading(btn, false);
@@ -366,6 +386,7 @@ async function createRestaurant() {
     }
 
     try {
+        console.log('[Admin] Creando restaurante:', data);
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
@@ -374,7 +395,9 @@ async function createRestaurant() {
             })
         });
 
+        console.log('[Admin] Respuesta crear:', res.status, res.statusText);
         const result = await res.json();
+        console.log('[Admin] Resultado crear:', result);
 
         if (result.success) {
             showToast(`✅ "${data.name}" creado exitosamente`, 'success');
@@ -402,7 +425,8 @@ async function createRestaurant() {
         }
 
     } catch (error) {
-        console.error('Error creating restaurant:', error);
+        console.error('[Admin] Error creando restaurante:', error);
+        console.error('[Admin] Stack:', error.stack);
         showToast(`❌ Error de conexión: ${error.message}`, 'error');
     } finally {
         setButtonLoading(btn, false);
@@ -501,6 +525,7 @@ async function generateLink() {
     setButtonLoading(btn, true);
 
     try {
+        console.log('[Admin] Generando link para:', { critico, restaurante, fecha });
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
@@ -511,7 +536,9 @@ async function generateLink() {
             })
         });
 
+        console.log('[Admin] Respuesta generar link:', res.status, res.statusText);
         const result = await res.json();
+        console.log('[Admin] Resultado generar link:', result);
 
         if (result.success) {
             // Construir URL relativa a carga.html usando el host actual
@@ -540,7 +567,8 @@ async function generateLink() {
         }
 
     } catch (error) {
-        console.error('Error generating link:', error);
+        console.error('[Admin] Error generando link:', error);
+        console.error('[Admin] Stack:', error.stack);
         showToast(`❌ Error de conexión: ${error.message}`, 'error');
     } finally {
         setButtonLoading(btn, false);
@@ -690,8 +718,11 @@ async function loadStats() {
     const statsContent = document.getElementById('stats-content');
 
     try {
+        console.log('[Stats] Cargando estadísticas desde:', SCRIPT_URL + '?action=getStats');
         const res = await fetch(SCRIPT_URL + '?action=getStats');
+        console.log('[Stats] Respuesta del servidor:', res.status, res.statusText);
         const json = await res.json();
+        console.log('[Stats] JSON recibido:', JSON.stringify(json).substring(0, 500));
 
         if (json.error) throw new Error(json.error);
 
@@ -702,8 +733,13 @@ async function loadStats() {
         const totalViews = (statsData.dailyViews || []).reduce((sum, d) => sum + d.count, 0);
         document.getElementById('stats-total-count').textContent = totalViews.toLocaleString('es-AR');
 
-        // Render chart and top
-        renderPageViewsChart('daily');
+        // Render chart only if section is open, otherwise defer
+        const statsBody = document.getElementById('body-stats');
+        if (statsBody && statsBody.classList.contains('open')) {
+            renderPageViewsChart('daily');
+        }
+        // If section is closed, chart will be rendered when section opens (see toggleSection)
+
         renderRestaurantTop(statsData.restaurantViews || []);
 
         // Show content
@@ -713,7 +749,8 @@ async function loadStats() {
         lucide.createIcons();
 
     } catch (error) {
-        console.error('Error loading stats:', error);
+        console.error('[Stats] Error cargando estadísticas:', error);
+        console.error('[Stats] Stack:', error.stack);
         if (statsLoader) {
             statsLoader.innerHTML = `
                 <div class="stats-empty">

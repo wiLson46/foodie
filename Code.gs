@@ -434,6 +434,13 @@ function updateRestaurant(postData) {
     }
   }
 
+  // Update Google Form dropdown
+  try {
+    updateFormRestaurants();
+  } catch(e) {
+    Logger.log("Non-fatal error updating form: " + e);
+  }
+
   return {
     success: true,
     message: "Restaurante '" + (datos.name || '') + "' actualizado correctamente."
@@ -441,7 +448,7 @@ function updateRestaurant(postData) {
 }
 
 // =============================================
-// ADMIN: Agregar un nuevo restaurante
+// ADMIN: Registrar una Nueva Visita (Agregar restaurante)
 // =============================================
 function addRestaurant(postData) {
   var datos = postData.data;
@@ -536,6 +543,13 @@ function addRestaurant(postData) {
         sourceRange.copyTo(destRange, SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
       }
     }
+  }
+
+  // Update Google Form dropdown
+  try {
+    updateFormRestaurants();
+  } catch(e) {
+    Logger.log("Non-fatal error updating form: " + e);
   }
 
   return {
@@ -720,4 +734,92 @@ function getStats() {
     monthlyViews: monthlyViews,
     restaurantViews: restaurantViews
   };
+}
+
+// =============================================
+// ACTUALIZAR FORMULARIO DE VOTOS
+// =============================================
+/**
+ * Actualiza las opciones de la pregunta "Lugar a votar" en Google Forms
+ * basándose en los nombres únicos de la tabla principal.
+ */
+function updateFormRestaurants() {
+  var FORM_ID = '1KHULr2NKXyvU57qObwUw9S1y2h_S8TZFimIIWfScnVk'; 
+  
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    Logger.log("No se encontró la hoja " + SHEET_NAME);
+    return;
+  }
+  
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return; // Sin datos
+  
+  var headers = data[0];
+  
+  // Encontrar la columna "name" o "nombre"
+  var nameCol = -1;
+  for (var i = 0; i < headers.length; i++) {
+    var h = String(headers[i]).toLowerCase().trim();
+    if (h === 'name' || h === 'nombre') {
+      nameCol = i;
+      break;
+    }
+  }
+  
+  if (nameCol === -1) {
+    Logger.log("No se encontró la columna name/nombre en la hoja " + SHEET_NAME);
+    return;
+  }
+  
+  // Extraer nombres únicos filtrando vacíos
+  var uniqueNames = [];
+  for (var i = 1; i < data.length; i++) {
+    var name = String(data[i][nameCol]).trim();
+    if (name !== "" && uniqueNames.indexOf(name) === -1) {
+      uniqueNames.push(name);
+    }
+  }
+  
+  // Ordenar alfabéticamente
+  uniqueNames.sort(function(a, b) {
+    return a.toLowerCase().localeCompare(b.toLowerCase());
+  });
+  
+  Logger.log("Se encontraron " + uniqueNames.length + " restaurantes únicos.");
+  
+  if (FORM_ID === 'AQUI_PONE_EL_ID_DEL_FORM_DE_EDICION') {
+    Logger.log("ERORR: Debes poner el ID de tu formulario en la variable FORM_ID.");
+    return;
+  }
+  
+  try {
+    var form = FormApp.openById(FORM_ID);
+    var items = form.getItems();
+    
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var title = item.getTitle().toLowerCase().trim();
+      
+      // Busca la pregunta llamada "Lugar a votar" (o que contenga esas palabras)
+      if (title.indexOf('lugar') !== -1 || title.indexOf('restaurante') !== -1) {
+        var itemType = item.getType();
+        
+        if (itemType === FormApp.ItemType.LIST) {
+          item.asListItem().setChoiceValues(uniqueNames);
+          Logger.log("Pregunta de tipo Lista Desplegable actualizada con éxito.");
+          return;
+        } else if (itemType === FormApp.ItemType.MULTIPLE_CHOICE) {
+          item.asMultipleChoiceItem().setChoiceValues(uniqueNames);
+          Logger.log("Pregunta de tipo Selección Múltiple actualizada con éxito.");
+          return;
+        }
+      }
+    }
+    
+    Logger.log("No se encontró ninguna pregunta que contenga 'Lugar' o 'Restaurante' en su título.");
+    
+  } catch (error) {
+    Logger.log("Error al abrir o editar el Formulario: " + error.toString());
+  }
 }

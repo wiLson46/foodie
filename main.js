@@ -2,6 +2,7 @@
 // --- CONFIG & DATA ---
 const CONFIG = {
     mainDataSheet: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv',
+    votesSheet: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1795075061',
     tabsData: {
         presencial: ['ranking', 'map'],
         delivery: ['ranking']
@@ -18,12 +19,25 @@ function trackEvent(event, restaurant) {
     try {
         const body = { action: 'trackEvent', event };
         if (restaurant) body.restaurant = restaurant;
+        console.log('[Tracking] Enviando evento:', JSON.stringify(body));
         fetch(TRACKING_URL, {
             method: 'POST',
-            body: JSON.stringify(body)
-        }).catch(() => { }); // Silenciar errores de tracking
+            body: JSON.stringify(body),
+            redirect: 'follow',
+            headers: { 'Content-Type': 'text/plain' }
+        })
+        .then(res => {
+            console.log('[Tracking] Respuesta:', res.status, res.statusText, 'URL:', res.url);
+            return res.text();
+        })
+        .then(text => {
+            console.log('[Tracking] Body respuesta:', text.substring(0, 200));
+        })
+        .catch(err => {
+            console.warn('[Tracking] Error en fetch:', err.message || err);
+        });
     } catch (e) {
-        // Never break the app for tracking
+        console.warn('[Tracking] Error general:', e.message || e);
     }
 }
 
@@ -41,6 +55,7 @@ let filteredRestaurants = []; // Restaurants filtered by both mode and location
 
 let currentSort = 'score'; // Default sort order
 let currentMode = 'presencial'; // 'presencial' | 'delivery'
+let publicVotes = {}; // { 'restaurant name (lowercase)': { avg: 8.5, count: 3 } }
 
 // --- DOM ELEMENTS (Cached) ---
 let rankingList, homeView, detailView, restaurantContent, backBtn, header;
@@ -81,16 +96,22 @@ function fetchSheet(url) {
         url = url.replace(/\/edit.*$/, '/export?format=csv');
     }
 
+    console.log('[FetchSheet] Descargando CSV desde:', url);
+
     return new Promise((resolve, reject) => {
         Papa.parse(url, {
             download: true,
             header: true,
             complete: (results) => {
+                console.log('[FetchSheet] CSV parseado OK —', (results.data || []).length, 'filas, errores PapaParse:', results.errors?.length || 0);
+                if (results.errors?.length > 0) {
+                    console.warn('[FetchSheet] Errores de parseo:', results.errors.slice(0, 5));
+                }
                 const normalized = normalizeData(results.data || []);
                 resolve(normalized);
             },
             error: (err) => {
-                console.warn(`Error fetching sheet: ${url}`, err);
+                console.error('[FetchSheet] Error descargando CSV:', url, err);
                 resolve([]); // Resolve with empty array to not break Promise.all
             }
         });
@@ -105,7 +126,35 @@ async function fetchData() {
     rankingList.innerHTML = '<div class="loader">Cargando la selección...</div>';
 
     try {
-        const mainData = await fetchSheet(CONFIG.mainDataSheet);
+        // Fetch main data and votes in parallel
+        const [mainData, votesData] = await Promise.all([
+            fetchSheet(CONFIG.mainDataSheet),
+            fetchSheet(CONFIG.votesSheet)
+        ]);
+
+        // Process public votes
+        publicVotes = {};
+        if (votesData && votesData.length > 0) {
+            console.log('[Votes] Procesando', votesData.length, 'votos públicos');
+            votesData.forEach(v => {
+                const name = (v['lugar a votar'] || '').trim().toLowerCase();
+                const score = parseFloat(v['puntuar']);
+                if (name && !isNaN(score)) {
+                    if (!publicVotes[name]) {
+                        publicVotes[name] = { total: 0, count: 0 };
+                    }
+                    publicVotes[name].total += score;
+                    publicVotes[name].count++;
+                }
+            });
+            // Calculate averages
+            Object.keys(publicVotes).forEach(key => {
+                publicVotes[key].avg = (publicVotes[key].total / publicVotes[key].count).toFixed(1);
+            });
+            console.log('[Votes] Votos procesados:', publicVotes);
+        } else {
+            console.log('[Votes] No se encontraron votos públicos');
+        }
 
         if (isValidData(mainData)) {
             const hasName = Object.keys(mainData[0]).some(k => k === 'name' || k === 'nombre');
@@ -154,7 +203,8 @@ async function fetchData() {
 
         console.log("Datos cargados:", { mode: currentMode, allRestaurants });
     } catch (err) {
-        console.error("Error loading data:", err);
+        console.error('[FetchData] Error cargando datos del spreadsheet:', err);
+        console.error('[FetchData] Stack:', err.stack);
         allRestaurants = MOCK_DATA.map(m => ({ ...m, presencialDelivery: 'P', critics: {} }));
     }
 
@@ -427,8 +477,10 @@ function showDetail(res, updateHash = true) {
     console.log("--- DEBUG DETALLE ---");
     console.log("Datos del restaurante:", res);
 
-    // Track detail view
-    trackEvent('detail_view', res.name);
+    // Track detail view only on the initial call (not on hashchange re-entry)
+    if (updateHash) {
+        trackEvent('detail_view', res.name);
+    }
 
     // Update URL hash if needed
     if (updateHash) {
@@ -480,6 +532,28 @@ function showDetail(res, updateHash = true) {
                         <div class="score-value">${rating}</div>
                     </div>
 
+                    <!-- Public Score -->
+                    ${(() => {
+                        const voteKey = (res.name || '').trim().toLowerCase();
+                        const voteData = publicVotes[voteKey];
+                        const publicScore = voteData ? voteData.avg : '-';
+                        const voteCount = voteData ? voteData.count : 0;
+                        return `
+                    <div class="detail-score-box public-score-box">
+                        <div class="score-label">Puntaje del Público</div>
+                        <div class="score-value-row">
+                            <div class="score-value">${publicScore}</div>
+                            <div class="votes-pill">${voteCount} ${voteCount === 1 ? 'voto' : 'votos'}</div>
+                        </div>
+                    </div>
+                        `;
+                    })()}
+
+                    <!-- Vote Button -->
+                    <button class="vote-btn" onclick="openVoteModal()">
+                        <i data-lucide="star"></i>
+                        <span>Votá acá</span>
+                    </button>
                 </div>
 
                 <!-- Location -->
@@ -912,6 +986,23 @@ function setupModeSwitcher() {
             filterByMode();
         });
     });
+}
+
+// =============================================
+// VOTE MODAL
+// =============================================
+function openVoteModal() {
+    const modal = document.getElementById('vote-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeVoteModal() {
+    const modal = document.getElementById('vote-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
 }
 
 /**

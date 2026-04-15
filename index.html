@@ -136,6 +136,24 @@
         <img id="lightbox-img" src="" alt="Imagen ampliada">
     </div>
 
+    <!-- Vote Modal -->
+    <div id="vote-modal" class="vote-modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="vote-modal-container">
+            <div class="vote-modal-header">
+                <div class="vote-modal-title">
+                    <i data-lucide="star"></i>
+                    Votá por este Restaurante
+                </div>
+                <button class="vote-modal-close" onclick="closeVoteModal()" aria-label="Cerrar modal">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="vote-modal-body">
+                <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSccteyXdae90sOgyONjnyXqJCjRWk211Vjk89aMDR0_3qyr-A/viewform?embedded=true" frameborder="0" marginheight="0" marginwidth="0">Cargando…</iframe>
+            </div>
+        </div>
+    </div>
+
 
     <!-- JavaScript -->
     <script src="main.js"></script>

@@ -1,7 +1,7 @@
 /**
  * URL del Web App de Google Apps Script
  */
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw6Vg9eGEYZPR6HgcGxfbRR1gU9QRUPtDP_GE9mteCO5WcFbLHHyYQGkcw_1uDRZ_CX/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzRRUX6gcOh4gNMxrYUBKTD9eQ9gmkFigLcPHPNBo5c8BtqgRLlww8mo_UvpW2rieNY/exec';
 
 // --- Estado global ---
 let appData = {
@@ -68,14 +68,17 @@ async function init() {
         appToken = token;
         const reqUrl = SCRIPT_URL + (token ? `?token=${token}` : "");
 
+        console.log('[Carga] Cargando datos desde:', reqUrl);
         const res = await fetch(reqUrl);
+        console.log('[Carga] Respuesta del servidor:', res.status, res.statusText);
         const json = await res.json();
+        console.log('[Carga] JSON recibido, keys:', Object.keys(json));
 
         if (json.error) throw new Error(json.error);
 
         appData = json;
-        console.log("Datos cargados:", appData);
-        if (json._debug) console.log("Debug columnas:", json._debug);
+        console.log("[Carga] Datos cargados:", appData);
+        if (json._debug) console.log("[Carga] Debug columnas:", json._debug);
 
         populateCritics();
         populateDates();
@@ -100,7 +103,8 @@ async function init() {
         }
 
     } catch (error) {
-        console.error("Error:", error);
+        console.error('[Carga] Error cargando datos:', error);
+        console.error('[Carga] Stack:', error.stack);
         statusText.textContent = `❌ Error: ${error.message || "No se pudo conectar"}.`;
         statusText.style.color = "#e74c3c";
         // Asegurar que todo esté deshabilitado en caso de error
@@ -295,12 +299,15 @@ form.addEventListener('submit', async (e) => {
     btnSubmit.classList.add('loading');
 
     try {
+        console.log('[Carga] Enviando reseña:', payload);
         const response = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify(payload)
         });
 
+        console.log('[Carga] Respuesta del servidor:', response.status, response.statusText);
         const result = await response.json();
+        console.log('[Carga] Resultado:', result);
 
         if (result.success) {
             showResult(true, "¡Reseña cargada!", result.message || "Los datos fueron guardados correctamente.");
@@ -310,7 +317,8 @@ form.addEventListener('submit', async (e) => {
 
     } catch (error) {
         showResult(false, "Error de conexión", error.message);
-        console.error("Fetch POST Error:", error);
+        console.error('[Carga] Error enviando reseña:', error);
+        console.error('[Carga] Stack:', error.stack);
     } finally {
         btnSubmit.disabled = false;
         btnSubmit.classList.remove('loading');

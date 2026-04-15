@@ -1303,4 +1303,202 @@ input:checked+.slider:before {
     height: 100%;
     align-items: stretch;
 }
-
+
+/* ========== PUBLIC SCORE ========== */
+
+.public-score-box {
+    border-color: rgba(102, 126, 234, 0.3) !important;
+    background: rgba(102, 126, 234, 0.08) !important;
+}
+
+.dark-mode .public-score-box {
+    background: rgba(102, 126, 234, 0.15) !important;
+    border-color: rgba(102, 126, 234, 0.25) !important;
+}
+
+.score-value-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.votes-pill {
+    font-family: var(--font-body);
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: #667eea;
+    background: rgba(102, 126, 234, 0.12);
+    padding: 0.15rem 0.45rem;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+.dark-mode .votes-pill {
+    color: #8fa4ff;
+    background: rgba(102, 126, 234, 0.2);
+}
+
+/* Vote Button */
+.vote-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    padding: 0.5rem 0.6rem;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #FF9100, #ffb74d);
+    color: #fff;
+    font-family: var(--font-title);
+    font-weight: 700;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(255, 145, 0, 0.25);
+    min-width: 55px;
+    align-self: stretch;
+}
+
+.vote-btn i {
+    width: 16px;
+    height: 16px;
+}
+
+.vote-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(255, 145, 0, 0.35);
+}
+
+.vote-btn:active {
+    transform: translateY(0);
+}
+
+/* ========== VOTE MODAL ========== */
+
+.vote-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.vote-modal-overlay.hidden {
+    display: none;
+}
+
+.vote-modal-container {
+    position: relative;
+    width: 100%;
+    max-width: 680px;
+    height: 85vh;
+    max-height: 750px;
+    background: var(--card-bg);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+}
+
+.vote-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    flex-shrink: 0;
+}
+
+.vote-modal-title {
+    font-family: var(--font-title);
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.vote-modal-title i {
+    width: 18px;
+    height: 18px;
+    color: var(--gold);
+}
+
+.vote-modal-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.vote-modal-close:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--text-main);
+}
+
+.dark-mode .vote-modal-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.vote-modal-close i {
+    width: 20px;
+    height: 20px;
+}
+
+.vote-modal-body {
+    flex: 1;
+    overflow: hidden;
+}
+
+.vote-modal-body iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+/* Mobile adjustments for vote elements */
+@media (max-width: 600px) {
+    .vote-btn {
+        min-width: 45px;
+        padding: 0.4rem 0.5rem;
+        font-size: 0.6rem;
+    }
+
+    .vote-btn i {
+        width: 14px;
+        height: 14px;
+    }
+
+    .votes-pill {
+        font-size: 0.5rem;
+        padding: 0.1rem 0.35rem;
+    }
+
+    .vote-modal-container {
+        height: 90vh;
+        max-height: none;
+        border-radius: 12px;
+    }
+}
