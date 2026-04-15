@@ -550,7 +550,7 @@ function showDetail(res, updateHash = true) {
                     })()}
 
                     <!-- Vote Button -->
-                    <button class="vote-btn" onclick="openVoteModal()">
+                    <button class="vote-btn" onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSccteyXdae90sOgyONjnyXqJCjRWk211Vjk89aMDR0_3qyr-A/viewform', '_blank')">
                         <i data-lucide="star"></i>
                         <span>Votá acá</span>
                     </button>
@@ -988,22 +988,6 @@ function setupModeSwitcher() {
     });
 }
 
-// =============================================
-// VOTE MODAL
-// =============================================
-function openVoteModal() {
-    const modal = document.getElementById('vote-modal');
-    if (!modal) return;
-    modal.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-}
-
-function closeVoteModal() {
-    const modal = document.getElementById('vote-modal');
-    if (!modal) return;
-    modal.classList.add('hidden');
-    document.body.style.overflow = '';
-}
 
 /**
  * Main initialization function
