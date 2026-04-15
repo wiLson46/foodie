@@ -1351,9 +1351,10 @@ input:checked+.slider:before {
     border: none;
     border-radius: 12px;
     background: linear-gradient(135deg, #FF9100, #ffb74d);
-    color: #111; /* Dark text for light mode gradient */
+    color: #111;
+    /* Dark text for light mode gradient */
     font-family: var(--font-title);
-    font-weight: 800;
+    font-weight: 700;
     font-size: 0.7rem;
     cursor: pointer;
     transition: all 0.3s ease;
@@ -1364,7 +1365,8 @@ input:checked+.slider:before {
 }
 
 .dark-mode .vote-btn {
-    color: #fff; /* White text for dark mode gradient */
+    color: #fff;
+    /* White text for dark mode gradient */
 }
 
 .vote-btn i {
