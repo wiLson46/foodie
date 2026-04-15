@@ -1404,7 +1404,7 @@ input:checked+.slider:before {
     width: 100%;
     max-width: 680px;
     height: 85vh;
-    max-height: 750px;
+    max-height: 760px;
     background: var(--card-bg);
     border-radius: 16px;
     overflow: hidden;
