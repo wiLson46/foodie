@@ -10,8 +10,9 @@
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap"
         rel="stylesheet">
 
     <!-- CSS -->
@@ -20,7 +21,7 @@
     <!-- Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" defer></script>
-    <script src="https://unpkg.com/lucide@latest" defer></script>
+    <script src="https://unpkg.com/lucide@0.344.0" defer></script>
 </head>
 
 <body class="light-mode">
@@ -102,11 +103,8 @@
             </section>
 
             <section id="map-view" class="tab-content hidden" role="tabpanel" aria-labelledby="map-tab">
-                <div class="map-placeholder">
-                    <iframe
-                        src="https://www.google.com/maps/d/embed?mid=1rViUskbYtl1mWekFkuBO6AQdzEsOI20&ehbc=2E312F&noprof=1"
-                        width="100%" height="450" style="border:0; border-radius: 16px;" loading="lazy" allowfullscreen
-                        referrerpolicy="no-referrer-when-downgrade" title="Mapa de ubicación de restaurantes"></iframe>
+                <div class="map-placeholder" id="map-container">
+                    <!-- Map iframe loaded on-demand when tab is clicked (performance optimization) -->
                 </div>
             </section>
 

@@ -41,6 +41,19 @@ function trackEvent(event, restaurant) {
     }
 }
 
+// --- PERFORMANCE: Debounced Lucide icon rendering ---
+let _lucideTimer = null;
+function debouncedCreateIcons() {
+    if (_lucideTimer) clearTimeout(_lucideTimer);
+    _lucideTimer = setTimeout(() => {
+        lucide.createIcons();
+        _lucideTimer = null;
+    }, 50);
+}
+
+// Track if map has been loaded
+let mapLoaded = false;
+
 const MOCK_DATA = [
     { rank: 1, name: "Pujol", rating: "9.8", description: "Cocina mexicana de autor en las manos de Enrique Olvera.", location: "CDMX, México" },
     { rank: 2, name: "Central", rating: "9.7", description: "Exploración de ecosistemas peruanos por Virgilio Martínez.", location: "Lima, Perú" },
@@ -358,8 +371,20 @@ function renderRanking() {
         item.addEventListener('click', () => showDetail(res));
         rankingList.appendChild(item);
     });
-    lucide.createIcons();
-    gsap.to('.ranking-item', { opacity: 1, y: 0, stagger: 0.1, duration: 0.8, ease: "power4.out" });
+    debouncedCreateIcons();
+
+    // Performance: Only stagger-animate first 8 items, rest appear instantly
+    const MAX_ANIMATED = 8;
+    const allItems = document.querySelectorAll('.ranking-item');
+    const animatedItems = Array.from(allItems).slice(0, MAX_ANIMATED);
+    const instantItems = Array.from(allItems).slice(MAX_ANIMATED);
+
+    if (animatedItems.length > 0) {
+        gsap.to(animatedItems, { opacity: 1, y: 0, stagger: 0.08, duration: 0.5, ease: "power4.out" });
+    }
+    if (instantItems.length > 0) {
+        gsap.set(instantItems, { opacity: 1, y: 0 });
+    }
 }
 
 // --- DETAIL VIEW HELPERS ---
@@ -381,7 +406,7 @@ function generatePhotosGalleryHTML(photosString) {
 
     return `
         <div class="gallery" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 1.5rem;">
-            ${photos.map(img => `<img src="${img}" class="gallery-img" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer; transition: opacity 0.2s;" onclick="openLightbox('${img}')">`).join('')}
+            ${photos.map(img => `<img src="${img}" class="gallery-img" loading="lazy" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer; transition: opacity 0.2s;" onclick="openLightbox('${img}')">`).join('')}
         </div>
     `;
 }
@@ -728,8 +753,8 @@ function showDetail(res, updateHash = true) {
         </div>
     `;
 
-    // Initialize icons for new content
-    lucide.createIcons();
+    // Initialize icons for new content (debounced to avoid redundant DOM scans)
+    debouncedCreateIcons();
 
     // Sub-tab logic
     setupSubTabs();
@@ -829,10 +854,24 @@ function setupMainTabs() {
             if (target === 'ranking') {
                 setTimeout(() => {
                     locationFilterContainer.classList.add('show');
-                    lucide.createIcons();
+                    debouncedCreateIcons();
                 }, 100);
             } else {
                 locationFilterContainer.classList.remove('show');
+            }
+
+            // Lazy-load Google Maps iframe on first click
+            if (target === 'map' && !mapLoaded) {
+                const mapContainer = document.getElementById('map-container');
+                if (mapContainer) {
+                    mapContainer.innerHTML = `
+                        <iframe
+                            src="https://www.google.com/maps/d/embed?mid=1rViUskbYtl1mWekFkuBO6AQdzEsOI20&ehbc=2E312F&noprof=1"
+                            width="100%" height="450" style="border:0; border-radius: 16px;" loading="lazy" allowfullscreen
+                            referrerpolicy="no-referrer-when-downgrade" title="Mapa de ubicación de restaurantes"></iframe>
+                    `;
+                    mapLoaded = true;
+                }
             }
 
             // Update buttons
@@ -1017,7 +1056,7 @@ function initApp() {
         const activeTab = document.querySelector('.tab-btn.active');
         if (activeTab && activeTab.getAttribute('data-tab') === 'ranking') {
             locationFilterContainer.classList.add('show');
-            lucide.createIcons();
+            debouncedCreateIcons();
         }
     }, 100);
 

@@ -12,7 +12,7 @@
     --font-title: 'Outfit', sans-serif;
     --font-body: 'DM Sans', sans-serif;
 
-    --transition-smooth: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+    --transition-smooth: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.5s cubic-bezier(0.19, 1, 0.22, 1), box-shadow 0.5s cubic-bezier(0.19, 1, 0.22, 1);
 
     /* Glassmorphism variables */
     --glass-bg-light: rgba(255, 255, 255, 0.4);
@@ -519,8 +519,10 @@ input:checked+.slider:before {
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
     cursor: pointer;
     border: 2px solid transparent;
-    transition: var(--transition-smooth);
+    transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1), box-shadow 0.5s cubic-bezier(0.19, 1, 0.22, 1);
     opacity: 0;
+    will-change: transform, opacity;
+    contain: layout style;
 }
 
 .ranking-item:hover {
@@ -578,30 +580,31 @@ input:checked+.slider:before {
             rgba(205, 127, 50, 0.12) 100%);
 }
 
-/* Glass shimmer effect */
+/* Glass shimmer effect — GPU-accelerated with transform instead of left */
 .top-1::after,
 .top-2::after,
 .top-3::after {
     content: '';
     position: absolute;
     top: 0;
-    left: -150%;
+    left: 0;
     width: 100%;
     height: 100%;
     background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-    transform: skewX(-20deg);
+    transform: translateX(-150%) skewX(-20deg);
     animation: glass-shimmer 4s infinite ease-in-out;
     pointer-events: none;
+    will-change: transform;
 }
 
 @keyframes glass-shimmer {
     0% {
-        left: -150%;
+        transform: translateX(-150%) skewX(-20deg);
     }
 
     40%,
     100% {
-        left: 150%;
+        transform: translateX(150%) skewX(-20deg);
     }
 }
 
@@ -1086,6 +1089,50 @@ input:checked+.slider:before {
     font-size: 0.85rem;
     font-weight: 500;
     color: var(--text-muted);
+}
+
+/* ========== PERFORMANCE: Reduce GPU load on mobile ========== */
+
+@media (max-width: 768px) {
+    /* Disable expensive backdrop-filter on mobile for better FPS */
+    .tabs-container,
+    .sub-tabs,
+    .footer {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: var(--card-bg);
+    }
+
+    .tab-btn.active,
+    .sub-tab-btn.active {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    .score-box,
+    .detail-score-box {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: rgba(240, 240, 240, 0.95);
+    }
+
+    .dark-mode .score-box,
+    .dark-mode .detail-score-box {
+        background: rgba(50, 50, 50, 0.95);
+    }
+
+    .dark-mode .tabs-container,
+    .dark-mode .sub-tabs,
+    .dark-mode .footer {
+        background: var(--card-bg);
+    }
+
+    /* Reduce shimmer animation frequency on mobile */
+    .top-1::after,
+    .top-2::after,
+    .top-3::after {
+        animation-duration: 6s;
+    }
 }
 
 /* ========== MOBILE RESPONSIVE ========== */
