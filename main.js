@@ -390,8 +390,23 @@ function renderRanking() {
 // --- DETAIL VIEW HELPERS ---
 
 /**
- * Generates photos gallery HTML
+ * Generates photos gallery HTML with progressive lazy loading
  */
+const INITIAL_PHOTOS_LIMIT = 6;
+
+/**
+ * Converts a full-resolution photo URL to its thumbnail equivalent.
+ * Maps ./fotos/DATE/FILE.JPEG → ./fotos_thumb/DATE/FILE.jpg
+ */
+function getThumbnailUrl(originalUrl) {
+    if (!originalUrl) return originalUrl;
+    // Replace 'fotos/' with 'fotos_thumb/' and force .jpg extension
+    let thumb = originalUrl.replace(/\/fotos\//, '/fotos_thumb/').replace(/\bfotos\//, 'fotos_thumb/');
+    // Change extension to .jpg (thumbnails are always JPEG)
+    thumb = thumb.replace(/\.(jpeg|jpg|png|webp)$/i, '.jpg');
+    return thumb;
+}
+
 function generatePhotosGalleryHTML(photosString) {
     if (!photosString || !photosString.trim()) {
         return `
@@ -403,13 +418,175 @@ function generatePhotosGalleryHTML(photosString) {
     }
 
     const photos = photosString.split(';').map(url => url.trim()).filter(url => url.length > 0);
+    const initialPhotos = photos.slice(0, INITIAL_PHOTOS_LIMIT);
+    const remainingPhotos = photos.slice(INITIAL_PHOTOS_LIMIT);
+    const hasMore = remainingPhotos.length > 0;
 
     return `
-        <div class="gallery" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 1.5rem;">
-            ${photos.map(img => `<img src="${img}" class="gallery-img" loading="lazy" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer; transition: opacity 0.2s;" onclick="openLightbox('${img}')">`).join('')}
+        <div class="gallery" id="photo-gallery" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 1.5rem;">
+            ${initialPhotos.map(img => `
+                <div class="gallery-img-wrapper">
+                    <img data-src="${getThumbnailUrl(img)}" data-full="${img}" class="gallery-img gallery-lazy" decoding="async"
+                        style="width: 100%; height: 100%; object-fit: cover; cursor: pointer;"
+                        onclick="openLightbox('${img}')">
+                </div>
+            `).join('')}
         </div>
+        ${hasMore ? `
+        <div id="gallery-more-container" style="text-align: center; margin-top: 1rem;">
+            <button id="gallery-show-more" onclick="showMorePhotos()" style="
+                padding: 0.6rem 1.5rem; border: 2px solid var(--border); border-radius: 10px;
+                background: var(--card-bg); color: var(--text-main); font-family: var(--font-title);
+                font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.3s ease;">
+                Ver ${remainingPhotos.length} foto${remainingPhotos.length > 1 ? 's' : ''} más
+            </button>
+        </div>
+        <template id="remaining-photos-data" data-photos='${JSON.stringify(remainingPhotos)}'></template>
+        ` : ''}
     `;
 }
+
+/**
+ * Sets up IntersectionObserver for progressive blur-up image loading.
+ * Images load when near viewport, start blurred, then transition to sharp.
+ * Loading is staggered to prevent simultaneous decoding frame drops.
+ */
+let galleryObserver = null;
+let galleryLoadQueue = [];
+let galleryLoadTimer = null;
+
+function processGalleryQueue() {
+    if (galleryLoadQueue.length === 0) {
+        galleryLoadTimer = null;
+        return;
+    }
+
+    const img = galleryLoadQueue.shift();
+    const src = img.getAttribute('data-src');
+    if (!src) {
+        // Skip and process next
+        processGalleryQueue();
+        return;
+    }
+
+    // Set the src — browser starts downloading
+    img.src = src;
+    img.removeAttribute('data-src');
+
+    // Show the image immediately (blurred via CSS)
+    img.style.opacity = '1';
+
+    img.addEventListener('load', () => {
+        // Image fully decoded — trigger blur-to-sharp transition
+        requestAnimationFrame(() => {
+            img.classList.add('loaded');
+            const wrapper = img.closest('.gallery-img-wrapper');
+            if (wrapper) wrapper.classList.add('loaded');
+        });
+    }, { once: true });
+
+    // Handle cached/already-loaded images
+    if (img.complete && img.naturalWidth > 0) {
+        img.classList.add('loaded');
+        const wrapper = img.closest('.gallery-img-wrapper');
+        if (wrapper) wrapper.classList.add('loaded');
+    }
+
+    // Stagger next image by 150ms to avoid simultaneous decoding
+    galleryLoadTimer = setTimeout(processGalleryQueue, 150);
+}
+
+function setupGalleryObserver() {
+    // Disconnect previous observer if exists
+    if (galleryObserver) {
+        galleryObserver.disconnect();
+        galleryObserver = null;
+    }
+    // Clear any pending load queue
+    if (galleryLoadTimer) {
+        clearTimeout(galleryLoadTimer);
+        galleryLoadTimer = null;
+    }
+    galleryLoadQueue = [];
+
+    const lazyImages = document.querySelectorAll('.gallery-lazy:not(.loaded)');
+    if (lazyImages.length === 0) return;
+
+    // Use IntersectionObserver for efficient lazy loading
+    if ('IntersectionObserver' in window) {
+        galleryObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    // Add to load queue instead of loading immediately
+                    galleryLoadQueue.push(img);
+                    galleryObserver.unobserve(img);
+                }
+            });
+            // Start processing queue if not already running
+            if (galleryLoadQueue.length > 0 && !galleryLoadTimer) {
+                processGalleryQueue();
+            }
+        }, {
+            rootMargin: '200px',
+            threshold: 0.01
+        });
+
+        lazyImages.forEach(img => galleryObserver.observe(img));
+    } else {
+        // Fallback: load all images immediately
+        lazyImages.forEach(img => {
+            img.src = img.getAttribute('data-src');
+            img.removeAttribute('data-src');
+            img.style.opacity = '1';
+            img.classList.add('loaded');
+            const wrapper = img.closest('.gallery-img-wrapper');
+            if (wrapper) wrapper.classList.add('loaded');
+        });
+    }
+}
+
+/**
+ * Expands gallery to show remaining photos
+ */
+window.showMorePhotos = function() {
+    const template = document.getElementById('remaining-photos-data');
+    const gallery = document.getElementById('photo-gallery');
+    const moreContainer = document.getElementById('gallery-more-container');
+
+    if (!template || !gallery) return;
+
+    try {
+        const remainingPhotos = JSON.parse(template.getAttribute('data-photos') || '[]');
+
+        // Append remaining photos to gallery
+        remainingPhotos.forEach(img => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'gallery-img-wrapper';
+
+            const imgEl = document.createElement('img');
+            imgEl.setAttribute('data-src', getThumbnailUrl(img));
+            imgEl.setAttribute('data-full', img);
+            imgEl.className = 'gallery-img gallery-lazy';
+            imgEl.decoding = 'async';
+            imgEl.style.cssText = 'width: 100%; height: 100%; object-fit: cover; cursor: pointer;';
+            imgEl.onclick = () => openLightbox(img);
+
+            wrapper.appendChild(imgEl);
+            gallery.appendChild(wrapper);
+        });
+
+        // Remove the "show more" button and template
+        if (moreContainer) moreContainer.remove();
+        template.remove();
+
+        // Re-observe new images
+        setupGalleryObserver();
+
+    } catch (e) {
+        console.warn('[Gallery] Error loading more photos:', e);
+    }
+};
 
 /**
  * Generates scores table HTML
@@ -653,11 +830,10 @@ function showDetail(res, updateHash = true) {
             <div id="puntajes-content" class="sub-tab-content hidden">
                 <style>
                     .scores-table-container {
-                        background: rgba(255, 255, 255, 0.4);
+                        background: rgba(255, 255, 255, 0.85);
                         border: 1px solid rgba(255, 255, 255, 0.6);
                         border-radius: 12px;
                         padding: 1rem;
-                        backdrop-filter: blur(10px);
                         overflow-x: auto;
                     }
                     .dark-mode .scores-table-container {
@@ -758,6 +934,9 @@ function showDetail(res, updateHash = true) {
 
     // Sub-tab logic
     setupSubTabs();
+
+    // Setup progressive image loading for gallery
+    setupGalleryObserver();
 
     // Transition animation
     const tl = gsap.timeline();
