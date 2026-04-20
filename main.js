@@ -16,6 +16,10 @@ const TRACKING_URL = 'https://script.google.com/macros/s/AKfycbxT0G-CwgaZgAZsKXd
  * Sends a tracking event silently (fire-and-forget)
  */
 function trackEvent(event, restaurant) {
+    if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') {
+        console.log('[Tracking] Ignorando evento en ambiente local (pruebas):', event, restaurant);
+        return;
+    }
     try {
         const body = { action: 'trackEvent', event };
         if (restaurant) body.restaurant = restaurant;
