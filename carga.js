@@ -1,9 +1,8 @@
 /**
- * URL del Web App de Google Apps Script
+ * Carga (crítico) — carga.js
  */
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwxeoejxV6citQRUl4PinrsDpnp3TNQBA7wrCXbHw2a02MvUsARYZnOwBWdVxEWjR6P/exec';
+const SCRIPT_URL = (window.COMER_CONFIG && window.COMER_CONFIG.SCRIPT_URL) || '';
 
-// --- Estado global ---
 let appData = {
     critics: [],
     dates: [],
@@ -14,7 +13,6 @@ let isSuccess = false;
 
 let currentType = 'presencial';
 
-// --- Cache DOM ---
 const criticSelect = document.getElementById('critic-select');
 const dateSelect = document.getElementById('date-select');
 const restSelect = document.getElementById('restaurant-select');
@@ -30,7 +28,6 @@ const statusText = document.getElementById('status-text');
 const form = document.getElementById('review-form');
 const btnSubmit = document.getElementById('submit-btn');
 
-// Modal de resultado
 const resultModal = document.getElementById('result-modal');
 const resultIconSuccess = document.getElementById('result-icon-success');
 const resultIconError = document.getElementById('result-icon-error');
@@ -38,47 +35,50 @@ const resultTitle = document.getElementById('result-title');
 const resultMessage = document.getElementById('result-message');
 const resultBtn = document.getElementById('result-btn');
 
-// Inputs de puntuación
 const inAvg = document.getElementById('score-avg');
-const in1 = document.getElementById('score-1'); // Comida
-const in2 = document.getElementById('score-2'); // Lugar / Presentación
-const in3 = document.getElementById('score-3'); // Atención / Precio
+const in1 = document.getElementById('score-1');
+const in2 = document.getElementById('score-2');
+const in3 = document.getElementById('score-3');
 
-// --- Inicialización ---
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
-    if (SCRIPT_URL === 'AGREGA_AQUI_LA_URL_DE_TU_WEB_APP_APPS_SCRIPT') {
-        statusText.textContent = "⚠ Atención: Falta configurar SCRIPT_URL en carga.js";
+    if (!SCRIPT_URL) {
+        statusText.textContent = "⚠ Atención: Falta configurar SCRIPT_URL en config.js";
         statusText.style.color = "#e74c3c";
         return;
     }
 
-    // Auto-cálculo del promedio
-    in1.addEventListener('input', updateAverage);
-    in2.addEventListener('input', updateAverage);
-    in3.addEventListener('input', updateAverage);
+    [in1, in2, in3].forEach(input => {
+        input.addEventListener('input', () => {
+            validateScoreInput(input);
+            updateAverage();
+        });
+        input.addEventListener('blur', () => validateScoreInput(input));
+    });
 
-    // Botón del modal para resetear
     resultBtn.addEventListener('click', resetForm);
 
     try {
         const urlParams = new URLSearchParams(window.location.search);
         const token = urlParams.get('token') || urlParams.get('id');
         appToken = token;
-        const reqUrl = SCRIPT_URL + (token ? `?token=${token}` : "");
 
-        console.log('[Carga] Cargando datos desde:', reqUrl);
+        // Limpiar el token de la URL/historial tras leerlo (no se queda en el address bar)
+        if (token) {
+            try {
+                const cleanUrl = window.location.pathname;
+                history.replaceState({}, document.title, cleanUrl);
+            } catch (e) {}
+        }
+
+        const reqUrl = SCRIPT_URL + (token ? `?token=${encodeURIComponent(token)}` : "");
         const res = await fetch(reqUrl);
-        console.log('[Carga] Respuesta del servidor:', res.status, res.statusText);
         const json = await res.json();
-        console.log('[Carga] JSON recibido, keys:', Object.keys(json));
 
         if (json.error) throw new Error(json.error);
 
         appData = json;
-        console.log("[Carga] Datos cargados:", appData);
-        if (json._debug) console.log("[Carga] Debug columnas:", json._debug);
 
         populateCritics();
         populateDates();
@@ -88,7 +88,6 @@ async function init() {
             statusText.textContent = "Datos sincronizados correctamente.";
             statusText.style.color = "#2ecc71";
         } else {
-            // No hay tokenInfo: el token no existe, expiró o ya fue usado
             btnSubmit.disabled = true;
             if (appToken) {
                 statusText.textContent = "❌ El link no es válido o ya fue usado.";
@@ -97,28 +96,23 @@ async function init() {
             }
         }
 
-        // Forzar renderizado de iconos
         if (typeof lucide !== 'undefined') {
             lucide.createIcons();
         }
 
     } catch (error) {
         console.error('[Carga] Error cargando datos:', error);
-        console.error('[Carga] Stack:', error.stack);
         statusText.textContent = `❌ Error: ${error.message || "No se pudo conectar"}.`;
         statusText.style.color = "#e74c3c";
-        // Asegurar que todo esté deshabilitado en caso de error
         criticSelect.disabled = true;
         dateSelect.disabled = true;
         btnSubmit.disabled = true;
     }
 }
 
-// --- Autocompletado por link secreto ---
 function autoSelectFromToken(info) {
     if (!info) return;
 
-    // 1. Setear y bloquear crítico
     for (let i = 0; i < criticSelect.options.length; i++) {
         if (criticSelect.options[i].text === info.critico) {
             criticSelect.selectedIndex = i;
@@ -127,7 +121,6 @@ function autoSelectFromToken(info) {
     }
     criticSelect.disabled = true;
 
-    // 2. Setear y bloquear fecha
     for (let i = 0; i < dateSelect.options.length; i++) {
         if (dateSelect.options[i].text === info.fecha) {
             dateSelect.selectedIndex = i;
@@ -136,10 +129,8 @@ function autoSelectFromToken(info) {
     }
     dateSelect.disabled = true;
 
-    // 3. Disparar el evento change para poblar los restaurantes de esa fecha
     dateSelect.dispatchEvent(new Event('change'));
 
-    // 4. Setear y bloquear restaurante
     for (let i = 0; i < restSelect.options.length; i++) {
         if (restSelect.options[i].text === info.restaurante) {
             restSelect.selectedIndex = i;
@@ -148,37 +139,58 @@ function autoSelectFromToken(info) {
     }
     restSelect.disabled = true;
 
-    // 5. Disparar el evento change para mostrar los campos de puntuación
     restSelect.dispatchEvent(new Event('change'));
 }
 
-// --- Auto-cálculo del promedio ---
+/**
+ * Marca visual de validez sin auto-corregir el valor.
+ */
+function validateScoreInput(input) {
+    if (!input) return false;
+    if (input.value === '') {
+        input.classList.remove('invalid');
+        clearScoreError(input);
+        return false;
+    }
+    const v = parseFloat(input.value);
+    const valid = !isNaN(v) && v >= 0 && v <= 10;
+    input.classList.toggle('invalid', !valid);
+    if (!valid) showScoreError(input, 'Ingresá un número entre 0 y 10');
+    else clearScoreError(input);
+    return valid;
+}
+
+function showScoreError(input, msg) {
+    let err = input.parentNode.querySelector('.error-msg');
+    if (!err) {
+        err = document.createElement('small');
+        err.className = 'error-msg';
+        err.style.color = '#e74c3c';
+        err.style.fontSize = '0.8rem';
+        err.style.marginTop = '0.25rem';
+        input.parentNode.appendChild(err);
+    }
+    err.textContent = msg;
+}
+
+function clearScoreError(input) {
+    const err = input.parentNode.querySelector('.error-msg');
+    if (err) err.remove();
+}
+
 function updateAverage() {
-    let v1 = parseFloat(in1.value);
-    let v2 = parseFloat(in2.value);
-    let v3 = parseFloat(in3.value);
+    const v1 = parseFloat(in1.value);
+    const v2 = parseFloat(in2.value);
+    const v3 = parseFloat(in3.value);
 
-    // Corregir valores fuera de rango o con exceso de decimales
-    const checkAndFix = (input) => {
-        let val = parseFloat(input.value);
-        if (isNaN(val)) return NaN;
-        val = Math.max(0, Math.min(10, val));
-        input.value = val;
-        return val;
-    };
-
-    v1 = checkAndFix(in1);
-    v2 = checkAndFix(in2);
-    v3 = checkAndFix(in3);
-
-    if (!isNaN(v1) && !isNaN(v2) && !isNaN(v3)) {
+    if (!isNaN(v1) && !isNaN(v2) && !isNaN(v3) &&
+        v1 >= 0 && v1 <= 10 && v2 >= 0 && v2 <= 10 && v3 >= 0 && v3 <= 10) {
         inAvg.value = ((v1 + v2 + v3) / 3).toFixed(2);
     } else {
         inAvg.value = '';
     }
 }
 
-// --- Poblar selectores ---
 function populateCritics() {
     criticSelect.innerHTML = '<option value="" disabled selected>Elegí tu nombre</option>';
     appData.critics.forEach(c => {
@@ -200,7 +212,6 @@ function populateDates() {
     });
 }
 
-// --- Cambio de fecha → poblar restaurantes ---
 dateSelect.addEventListener('change', (e) => {
     const selectedDate = e.target.value;
     const restaurants = appData.restaurantsByDate[selectedDate] || [];
@@ -222,7 +233,6 @@ dateSelect.addEventListener('change', (e) => {
     badgeType.style.display = 'none';
 });
 
-// --- Cambio de restaurante → mostrar campos dinámicos ---
 restSelect.addEventListener('change', (e) => {
     const selectedOpt = e.target.selectedOptions[0];
     if (!selectedOpt) return;
@@ -246,19 +256,22 @@ restSelect.addEventListener('change', (e) => {
     }
 
     badgeType.style.display = 'block';
-    lucide.createIcons();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
 
     inAvg.value = '';
     in1.value = '';
     in2.value = '';
     in3.value = '';
+    [in1, in2, in3].forEach(input => {
+        input.classList.remove('invalid');
+        clearScoreError(input);
+    });
 
     fieldContainer.style.display = 'block';
     void fieldContainer.offsetWidth;
     fieldContainer.classList.add('show');
 });
 
-// --- Submit ---
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
 
@@ -267,19 +280,18 @@ form.addEventListener('submit', async (e) => {
 
     if (!criticOpt || !criticOpt.value || !restOpt || !restOpt.value) return;
 
-    const comida = parseFloat(in1.value);
-    const field2 = parseFloat(in2.value);
-    const field3 = parseFloat(in3.value);
+    const v1 = validateScoreInput(in1);
+    const v2 = validateScoreInput(in2);
+    const v3 = validateScoreInput(in3);
 
-    if (isNaN(comida) || isNaN(field2) || isNaN(field3)) {
-        showResult(false, "Campos incompletos", "Todos los puntajes son obligatorios.");
-        return;
-    }
-
-    if (comida < 0 || comida > 10 || field2 < 0 || field2 > 10 || field3 < 0 || field3 > 10) {
+    if (!v1 || !v2 || !v3) {
         showResult(false, "Valores inválidos", "Los puntajes deben estar entre 0 y 10.");
         return;
     }
+
+    const comida = parseFloat(in1.value);
+    const field2 = parseFloat(in2.value);
+    const field3 = parseFloat(in3.value);
 
     const payload = {
         token: appToken,
@@ -288,26 +300,19 @@ form.addEventListener('submit', async (e) => {
         criticName: criticOpt.dataset.name,
         restaurantName: restOpt.dataset.name,
         type: currentType,
-        values: {
-            comida: comida,
-            field2: field2,
-            field3: field3
-        }
+        values: { comida, field2, field3 }
     };
 
     btnSubmit.disabled = true;
     btnSubmit.classList.add('loading');
 
     try {
-        console.log('[Carga] Enviando reseña:', payload);
         const response = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify(payload)
         });
 
-        console.log('[Carga] Respuesta del servidor:', response.status, response.statusText);
         const result = await response.json();
-        console.log('[Carga] Resultado:', result);
 
         if (result.success) {
             showResult(true, "¡Reseña cargada!", result.message || "Los datos fueron guardados correctamente.");
@@ -318,14 +323,12 @@ form.addEventListener('submit', async (e) => {
     } catch (error) {
         showResult(false, "Error de conexión", error.message);
         console.error('[Carga] Error enviando reseña:', error);
-        console.error('[Carga] Stack:', error.stack);
     } finally {
         btnSubmit.disabled = false;
         btnSubmit.classList.remove('loading');
     }
 });
 
-// --- Modal de resultado ---
 function showResult(success, title, message) {
     isSuccess = success;
     resultIconSuccess.style.display = success ? 'flex' : 'none';
@@ -341,8 +344,5 @@ function resetForm() {
         window.location.href = 'index.html';
         return;
     }
-    // Si hubo un error (no es success), simplemente ocultamos el modal.
-    // Como los campos están bloqueados por token, borrarlos empêchería 
-    // volver a intentar el submit con la misma data.
     resultModal.classList.add('hidden');
 }

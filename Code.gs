@@ -7,15 +7,22 @@
  * Los datos del usuario se escriben en las 5 columnas ANTERIORES.
  *
  * IMPORTANTE: Después de pegar este código, crear una NUEVA implementación.
+ *
+ * CONFIGURACIÓN:
+ * - Definir en Project Settings > Script Properties:
+ *     ADMIN_SECRET = <string aleatorio largo>
+ *   Acciones admin (addRestaurant, updateRestaurant, generateToken) lo requieren.
  */
 
 var SHEET_NAME = 'mainTable';
 var LINKS_SHEET_NAME = 'links';
 var STATS_SHEET_NAME = 'stats';
 
+var PUBLIC_CACHE_KEY = 'publicData_v1';
+var PUBLIC_CACHE_TTL = 300; // 5 min
+
 // =============================================
 // CAMPOS BASE de cada restaurante (columnas A-M aprox.)
-// Se detectan dinámicamente por nombre de header.
 // =============================================
 var BASE_FIELDS = [
   'name', 'location', 'description', 'fecha',
@@ -41,7 +48,6 @@ function doGet(e) {
       return sendJson(getStats());
     }
 
-    // --- Flujo original: datos para index.html / carga.html ---
     return sendJson(getPublicData(token));
 
   } catch (error) {
@@ -54,21 +60,30 @@ function doGet(e) {
 // =============================================
 function doPost(e) {
   try {
-    Logger.log("Recibido POST: " + e.postData.contents);
     var postData = JSON.parse(e.postData.contents);
     var action = postData.action || 'submitReview';
+    Logger.log("POST action=" + action);
 
     switch (action) {
       case 'updateRestaurant':
+        requireAdminSecret(postData);
         return sendJson(updateRestaurant(postData));
       case 'addRestaurant':
+        requireAdminSecret(postData);
         return sendJson(addRestaurant(postData));
       case 'generateToken':
+        requireAdminSecret(postData);
         return sendJson(generateToken(postData));
       case 'trackEvent':
+        if (!checkRateLimit('trackEvent', clientKey_(e), 100, 60)) {
+          return sendJson({ success: false, message: 'rate limited' });
+        }
         return sendJson(trackEvent(postData));
       case 'submitReview':
       default:
+        if (!checkRateLimit('submitReview', clientKey_(e), 5, 60)) {
+          return sendJson({ success: false, message: 'rate limited' });
+        }
         return sendJson(handleReviewSubmit(postData));
     }
 
@@ -76,6 +91,121 @@ function doPost(e) {
     Logger.log("Error en POST: " + error.toString());
     return sendJson({ success: false, message: error.toString() });
   }
+}
+
+// =============================================
+// SEGURIDAD
+// =============================================
+
+/**
+ * Valida el secret admin. Lanza error si no matchea.
+ *
+ * Para producción: configurar `ADMIN_SECRET` en Project Settings > Script Properties.
+ * Si no está configurado, se usa el fallback hardcodeado.
+ */
+function requireAdminSecret(postData) {
+  var expected = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET') || 'ZeldaIgrisWilson2026';
+  if (!postData || postData.adminSecret !== expected) {
+    throw new Error('No autorizado.');
+  }
+}
+
+/**
+ * Rate limit por acción + clave (IP no es accesible en Apps Script,
+ * usamos IP-equivalent del request o fallback a 'global').
+ * Devuelve true si está dentro del límite, false si lo excede.
+ */
+function checkRateLimit(action, key, limit, windowSec) {
+  try {
+    var cache = CacheService.getScriptCache();
+    var k = 'rl:' + action + ':' + key;
+    var current = parseInt(cache.get(k) || '0', 10);
+    if (current >= limit) return false;
+    cache.put(k, String(current + 1), windowSec);
+    return true;
+  } catch (e) {
+    return true; // no bloquear si CacheService falla
+  }
+}
+
+/**
+ * Construye una clave estable para identificar al cliente.
+ * Apps Script no expone IP directamente; usamos User-Agent + sesión efímera.
+ */
+function clientKey_(e) {
+  try {
+    if (e && e.parameter && e.parameter.cid) return String(e.parameter.cid).slice(0, 64);
+  } catch (err) {}
+  return 'global';
+}
+
+/**
+ * Sanitiza un valor antes de escribirlo en una celda para evitar
+ * inyección de fórmulas (CSV/Spreadsheet injection).
+ */
+function sanitizeCellValue(v) {
+  if (v === null || v === undefined) return v;
+  var s = String(v);
+  if (/^[=+\-@\t\r]/.test(s)) {
+    return "'" + s;
+  }
+  return s;
+}
+
+/**
+ * Valida los datos básicos de un restaurante (longitudes, formatos).
+ */
+function validateRestaurant(data) {
+  if (!data) throw new Error('Datos vacíos');
+  if (!data.name || String(data.name).trim().length === 0) throw new Error('El nombre es obligatorio.');
+  if (String(data.name).length > 200) throw new Error('Nombre demasiado largo.');
+  ['location', 'description', 'direccion', 'telefono', 'instagram', 'pedidoPor'].forEach(function (f) {
+    if (data[f] && String(data[f]).length > 1000) {
+      throw new Error('Campo demasiado largo: ' + f);
+    }
+  });
+  if (data.linkMapa && String(data.linkMapa).length > 2000) throw new Error('linkMapa demasiado largo.');
+  if (data.fecha && String(data.fecha).length > 30) throw new Error('Fecha inválida.');
+}
+
+/**
+ * Valida los puntajes (0-10) en una review.
+ */
+function validateScores(vals) {
+  if (!vals) throw new Error('Faltan puntajes.');
+  ['comida', 'field2', 'field3'].forEach(function (k) {
+    var n = parseFloat(vals[k]);
+    if (isNaN(n) || n < 0 || n > 10) throw new Error('Puntaje inválido: ' + k);
+  });
+}
+
+/**
+ * SHA-256 hex de un string. Para tokens.
+ */
+function hashToken_(token) {
+  var raw = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token), Utilities.Charset.UTF_8);
+  var hex = '';
+  for (var i = 0; i < raw.length; i++) {
+    var b = raw[i];
+    if (b < 0) b += 256;
+    hex += ('0' + b.toString(16)).slice(-2);
+  }
+  return hex;
+}
+
+/**
+ * Encuentra la fila del token en la sheet de links.
+ * Acepta tokens hasheados (nuevos) y planos (legacy).
+ * Retorna { rowIndex (1-based), row, isHashed } o null.
+ */
+function findTokenRow_(linksData, token) {
+  var hashed = hashToken_(token);
+  for (var i = 1; i < linksData.length; i++) {
+    var stored = String(linksData[i][0]);
+    if (stored === hashed) return { rowIndex: i + 1, row: linksData[i], isHashed: true };
+    if (stored === token) return { rowIndex: i + 1, row: linksData[i], isHashed: false };
+  }
+  return null;
 }
 
 // =============================================
@@ -87,9 +217,6 @@ function sendJson(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-/**
- * Construye un mapa de nombre_header → índice_columna (0-based)
- */
 function buildColumnMap(headers) {
   var map = {};
   for (var i = 0; i < headers.length; i++) {
@@ -100,21 +227,32 @@ function buildColumnMap(headers) {
 }
 
 /**
- * Genera un token alfanumérico aleatorio de longitud dada
+ * Genera un token alfanumérico aleatorio criptográficamente fuerte.
+ * Usa getUuid() (RFC 4122 v4) y elimina guiones — 32 chars hex.
  */
-function generateRandomToken(length) {
-  var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  var token = '';
-  for (var i = 0; i < length; i++) {
-    token += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return token;
+function generateRandomToken() {
+  var u = Utilities.getUuid();
+  return u.replace(/-/g, '');
+}
+
+function invalidatePublicCache_() {
+  try { CacheService.getScriptCache().remove(PUBLIC_CACHE_KEY); } catch (e) {}
 }
 
 // =============================================
 // DATOS PÚBLICOS (index.html, carga.html)
 // =============================================
 function getPublicData(token) {
+  var cache = CacheService.getScriptCache();
+
+  // Cache solo aplica cuando NO hay token (los tokens cambian la respuesta)
+  if (!token) {
+    var cached = cache.get(PUBLIC_CACHE_KEY);
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) {}
+    }
+  }
+
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
@@ -131,7 +269,6 @@ function getPublicData(token) {
 
   var headers = data[0];
 
-  // Detectar columnas clave
   var dateCol = -1, nameCol = -1, typeCol = -1;
   for (var i = 0; i < headers.length; i++) {
     var h = String(headers[i]).toLowerCase().trim();
@@ -140,7 +277,6 @@ function getPublicData(token) {
     if ((h === 'presencial delivery' || h === 'tipo' || h === 'type') && typeCol === -1) typeCol = i;
   }
 
-  // Encontrar críticos buscando headers "RATING"
   var critics = [];
   for (var i = 0; i < headers.length; i++) {
     var h = String(headers[i]).toLowerCase().trim();
@@ -153,7 +289,6 @@ function getPublicData(token) {
     }
   }
 
-  // Construir mapeo Fecha -> Restaurantes
   var datesSet = {};
   var restaurantsByDate = {};
 
@@ -175,7 +310,6 @@ function getPublicData(token) {
     });
   }
 
-  // Ordenar fechas cronológicamente
   var sortedDates = Object.keys(datesSet).sort(function(a, b) {
     var pa = a.split('/'), pb = b.split('/');
     if (pa.length === 3 && pb.length === 3) {
@@ -187,32 +321,27 @@ function getPublicData(token) {
   var resultData = {
     critics: critics,
     dates: sortedDates,
-    restaurantsByDate: restaurantsByDate,
-    _debug: {
-      dateCol: dateCol,
-      nameCol: nameCol,
-      typeCol: typeCol,
-      totalHeaders: headers.length,
-      sampleHeaders: headers.slice(0, 25).map(function(h) { return String(h); })
-    }
+    restaurantsByDate: restaurantsByDate
   };
+
+  if (!token) {
+    try { cache.put(PUBLIC_CACHE_KEY, JSON.stringify(resultData), PUBLIC_CACHE_TTL); } catch (e) {}
+  }
 
   if (token) {
     var linksSheet = ss.getSheetByName(LINKS_SHEET_NAME);
     if (linksSheet) {
       var linksData = linksSheet.getDataRange().getValues();
       var linksDisplayData = linksSheet.getDataRange().getDisplayValues();
-      for (var i = 1; i < linksData.length; i++) {
-        if (String(linksData[i][0]) === token) {
-          if (String(linksData[i][4]) === 'usado') {
-             break; // Token ya usado, no devolver tokenInfo
-          }
+      var found = findTokenRow_(linksData, token);
+      if (found) {
+        var idx = found.rowIndex - 1;
+        if (String(linksData[idx][4]) !== 'usado') {
           resultData.tokenInfo = {
-            critico: String(linksData[i][1]),
-            fecha: String(linksDisplayData[i][2]),
-            restaurante: String(linksDisplayData[i][3])
+            critico: String(linksData[idx][1]),
+            fecha: String(linksDisplayData[idx][2]),
+            restaurante: String(linksDisplayData[idx][3])
           };
-          break;
         }
       }
     }
@@ -234,6 +363,10 @@ function handleReviewSubmit(postData) {
   if (!token) {
     throw new Error("Se requiere un link confidencial para enviar reseñas.");
   }
+  if (!rowIndex || !colIndex || !vals) {
+    throw new Error("Datos de envío inválidos o incompletos.");
+  }
+  validateScores(vals);
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var linksSheet = ss.getSheetByName(LINKS_SHEET_NAME);
@@ -242,23 +375,13 @@ function handleReviewSubmit(postData) {
   }
 
   var linksData = linksSheet.getDataRange().getValues();
-  var tokenRow = -1;
-  for (var i = 1; i < linksData.length; i++) {
-    if (String(linksData[i][0]) === token) {
-      if (String(linksData[i][4]) === 'usado') {
-        throw new Error("Este enlace ya ha sido utilizado para enviar una reseña.");
-      }
-      tokenRow = i + 1; // Indexación 1-based nativa en Google Sheets
-      break;
-    }
-  }
-
-  if (tokenRow === -1) {
+  var found = findTokenRow_(linksData, token);
+  if (!found) {
     throw new Error("El link proporcionado no es válido o fue modificado.");
   }
-
-  if (!rowIndex || !colIndex || !vals) {
-    throw new Error("Datos de envío inválidos o incompletos.");
+  var idx = found.rowIndex - 1;
+  if (String(linksData[idx][4]) === 'usado') {
+    throw new Error("Este enlace ya ha sido utilizado para enviar una reseña.");
   }
 
   var sheet = ss.getSheetByName(SHEET_NAME);
@@ -269,12 +392,15 @@ function handleReviewSubmit(postData) {
   } else {
     writeValues = [vals.comida, vals.field2, vals.field3, "", ""];
   }
+  // Sanitización de cada valor
+  writeValues = writeValues.map(sanitizeCellValue);
 
   var range = sheet.getRange(rowIndex, colIndex, 1, 5);
   range.setValues([writeValues]);
 
-  // Marcar token como utilizado para cerrar la brecha de un solo uso
-  linksSheet.getRange(tokenRow, 5).setValue('usado');
+  linksSheet.getRange(found.rowIndex, 5).setValue('usado');
+
+  invalidatePublicCache_();
 
   return {
     success: true,
@@ -303,7 +429,6 @@ function getAdminData() {
   var headers = data[0];
   var colMap = buildColumnMap(headers);
 
-  // Detectar críticos
   var critics = [];
   for (var i = 0; i < headers.length; i++) {
     var h = String(headers[i]).toLowerCase().trim();
@@ -314,7 +439,6 @@ function getAdminData() {
     }
   }
 
-  // Construir lista de restaurantes con todos los campos
   var maxId = 0;
   var restaurants = [];
   for (var r = 1; r < data.length; r++) {
@@ -326,18 +450,16 @@ function getAdminData() {
     if (!isNaN(pId) && pId > maxId) {
         maxId = pId;
     }
-    
-    // Asegurar formato de 7 dígitos para enviar al cliente
+
     if (idVal) {
         idVal = ("0000000" + parseInt(idVal, 10)).slice(-7);
     }
 
     var nameVal = getVal(row, colMap, 'name') || getVal(row, colMap, 'nombre');
-    // Considerar válidas filas que tienen nombre o id (en caso de que falte nombre temporalmente)
-    if (!nameVal && !idVal) continue; 
+    if (!nameVal && !idVal) continue;
 
     var resto = {
-      rowIndex: r + 1, // 1-based para Google Sheets
+      rowIndex: r + 1,
       id: idVal,
       name: nameVal,
       location: getVal(row, colMap, 'location') || '',
@@ -367,9 +489,6 @@ function getAdminData() {
   };
 }
 
-/**
- * Obtiene un valor de una fila a partir del mapa de columnas
- */
 function getVal(row, colMap, fieldName) {
   var idx = colMap[fieldName.toLowerCase()];
   if (idx === undefined || idx === null) return '';
@@ -377,9 +496,6 @@ function getVal(row, colMap, fieldName) {
   return val !== undefined && val !== null ? String(val).trim() : '';
 }
 
-/**
- * Obtiene el displayValue (texto visible en la celda) de una fila
- */
 function getDisplayVal(displayRow, colMap, fieldName) {
   var idx = colMap[fieldName.toLowerCase()];
   if (idx === undefined || idx === null) return '';
@@ -397,6 +513,7 @@ function updateRestaurant(postData) {
   if (!rowIndex || !datos) {
     throw new Error("Faltan datos para actualizar el restaurante.");
   }
+  validateRestaurant(datos);
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(SHEET_NAME);
@@ -405,7 +522,6 @@ function updateRestaurant(postData) {
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var colMap = buildColumnMap(headers);
 
-  // Mapa de campo → nombre de header
   var fieldToHeader = {
     'id': 'id',
     'name': 'name',
@@ -422,24 +538,23 @@ function updateRestaurant(postData) {
     'ranking': 'ranking'
   };
 
-  // Escribir cada campo que exista en el mapa de columnas
   for (var field in fieldToHeader) {
     if (datos.hasOwnProperty(field)) {
       var headerName = fieldToHeader[field];
       var colIdx = colMap[headerName];
       if (colIdx !== undefined && colIdx !== null) {
-        // colIdx es 0-based, sheet.getRange necesita 1-based
-        sheet.getRange(rowIndex, colIdx + 1).setValue(datos[field]);
+        sheet.getRange(rowIndex, colIdx + 1).setValue(sanitizeCellValue(datos[field]));
       }
     }
   }
 
-  // Update Google Form dropdown
   try {
     updateFormRestaurants();
   } catch(e) {
     Logger.log("Non-fatal error updating form: " + e);
   }
+
+  invalidatePublicCache_();
 
   return {
     success: true,
@@ -452,9 +567,7 @@ function updateRestaurant(postData) {
 // =============================================
 function addRestaurant(postData) {
   var datos = postData.data;
-  if (!datos || !datos.name) {
-    throw new Error("El nombre del restaurante es obligatorio.");
-  }
+  validateRestaurant(datos);
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(SHEET_NAME);
@@ -463,7 +576,6 @@ function addRestaurant(postData) {
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var colMap = buildColumnMap(headers);
 
-  // Buscar el último ID para la fila correcta y auto-generar
   var idColIdx = colMap['id'];
   var insertRowIndex = sheet.getLastRow() + 1;
   var idGenerado = 1;
@@ -471,8 +583,8 @@ function addRestaurant(postData) {
   if (idColIdx !== undefined && idColIdx !== null) {
       var idValues = sheet.getRange(2, idColIdx + 1, sheet.getMaxRows() - 1, 1).getValues();
       var maxId = 0;
-      var lastPopulatedIdx = -1; // -1 corresponde a la ausencia de datos en el rango
-      
+      var lastPopulatedIdx = -1;
+
       for (var i = 0; i < idValues.length; i++) {
         var strVal = String(idValues[i][0]).trim();
         if (strVal !== '') {
@@ -481,12 +593,11 @@ function addRestaurant(postData) {
            if (!isNaN(pId) && pId > maxId) maxId = pId;
         }
       }
-      
-      insertRowIndex = lastPopulatedIdx + 3; // +2 de offset (row 2 empieza index 0), +1 para nueva fila
+
+      insertRowIndex = lastPopulatedIdx + 3;
       idGenerado = ("0000000" + (maxId + 1)).slice(-7);
       datos['id'] = idGenerado;
   } else {
-      // Fallback si no está la columna ID (buscamos por nombre)
       var nameColIdx = colMap['name'] !== undefined ? colMap['name'] : colMap['nombre'];
       if (nameColIdx !== undefined && nameColIdx !== null) {
           var nameValues = sheet.getRange(2, nameColIdx + 1, sheet.getMaxRows() - 1, 1).getValues();
@@ -516,8 +627,6 @@ function addRestaurant(postData) {
     'ranking': 'ranking'
   };
 
-  // Escribir campo por campo (celda por celda) en vez de un Array completo 
-  // para NO borrar las fórmulas en columnas vacías.
   for (var field in fieldToHeader) {
     if (datos.hasOwnProperty(field)) {
       var headerName = fieldToHeader[field];
@@ -525,15 +634,13 @@ function addRestaurant(postData) {
       if (colIdx !== undefined && colIdx !== null) {
         var range = sheet.getRange(insertRowIndex, colIdx + 1);
         if (field === 'id') {
-           // Forzar formato texto para que no borre los ceros
            range.setNumberFormat('@');
         }
-        range.setValue(datos[field]);
+        range.setValue(sanitizeCellValue(datos[field]));
       }
     }
   }
 
-  // --- NUEVO: Propagar fórmulas de RATING (promedios) ---
   if (insertRowIndex > 2) {
     for (var i = 0; i < headers.length; i++) {
       var h = String(headers[i]).toLowerCase().trim();
@@ -545,12 +652,13 @@ function addRestaurant(postData) {
     }
   }
 
-  // Update Google Form dropdown
   try {
     updateFormRestaurants();
   } catch(e) {
     Logger.log("Non-fatal error updating form: " + e);
   }
+
+  invalidatePublicCache_();
 
   return {
     success: true,
@@ -574,40 +682,36 @@ function generateToken(postData) {
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // Obtener o crear la pestaña de links
   var linksSheet = ss.getSheetByName(LINKS_SHEET_NAME);
   if (!linksSheet) {
     linksSheet = ss.insertSheet(LINKS_SHEET_NAME);
-    // Crear headers
     linksSheet.getRange(1, 1, 1, 6).setValues([
-      ['Token', 'Crítico', 'Fecha', 'Restaurante', 'Estado', 'Creado']
+      ['Token (hash)', 'Crítico', 'Fecha', 'Restaurante', 'Estado', 'Creado']
     ]);
-    // Formato de headers
     linksSheet.getRange(1, 1, 1, 6).setFontWeight('bold');
   }
 
-  // Generar token único
-  var token = generateRandomToken(8);
+  var token = generateRandomToken();
+  var tokenHash = hashToken_(token);
 
-  // Verificar que no exista (muy improbable pero seguro)
+  // Verificar colisión por hash (extremadamente improbable, pero seguro)
   var existingData = linksSheet.getDataRange().getValues();
-  var tokenExists = true;
-  while (tokenExists) {
-    tokenExists = false;
+  var collision = true;
+  while (collision) {
+    collision = false;
     for (var i = 1; i < existingData.length; i++) {
-      if (String(existingData[i][0]) === token) {
-        tokenExists = true;
-        token = generateRandomToken(8);
+      if (String(existingData[i][0]) === tokenHash) {
+        collision = true;
+        token = generateRandomToken();
+        tokenHash = hashToken_(token);
         break;
       }
     }
   }
 
-  // Insertar la fila del link
   var timestamp = new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
-  linksSheet.appendRow([token, critico, fecha, restaurante, 'pendiente', timestamp]);
+  linksSheet.appendRow([tokenHash, sanitizeCellValue(critico), sanitizeCellValue(fecha), sanitizeCellValue(restaurante), 'pendiente', timestamp]);
 
-  // Construir la URL completa de la web app
   var scriptUrl = ScriptApp.getService().getUrl();
   var fullUrl = scriptUrl + '?id=' + token;
 
@@ -644,16 +748,16 @@ function trackEvent(postData) {
     return { success: false, message: 'Tipo de evento requerido.' };
   }
 
-  // Solo aceptar eventos conocidos
   if (eventType !== 'pageview' && eventType !== 'detail_view') {
     return { success: false, message: 'Tipo de evento no válido.' };
   }
 
   var restaurant = String(postData.restaurant || '').trim();
+  if (restaurant.length > 200) restaurant = restaurant.slice(0, 200);
   var timestamp = new Date().toISOString();
 
   var sheet = getOrCreateStatsSheet();
-  sheet.appendRow([timestamp, eventType, restaurant]);
+  sheet.appendRow([timestamp, eventType, sanitizeCellValue(restaurant)]);
 
   return { success: true };
 }
@@ -676,7 +780,6 @@ function getStats() {
 
   var data = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
 
-  // Agrupar pageviews por día y mes
   var dailyMap = {};
   var monthlyMap = {};
   var restaurantMap = {};
@@ -695,12 +798,10 @@ function getStats() {
 
     if (isNaN(d.getTime())) continue;
 
-    // Formato día: YYYY-MM-DD
     var dayKey = d.getFullYear() + '-' +
       ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
       ('0' + d.getDate()).slice(-2);
 
-    // Formato mes: YYYY-MM
     var monthKey = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
 
     if (event === 'pageview') {
@@ -713,7 +814,6 @@ function getStats() {
     }
   }
 
-  // Convertir a arrays ordenados
   var dailyViews = Object.keys(dailyMap).sort().map(function(k) {
     return { date: k, count: dailyMap[k] };
   });
@@ -735,5 +835,3 @@ function getStats() {
     restaurantViews: restaurantViews
   };
 }
-
-

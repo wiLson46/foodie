@@ -1,0 +1,26 @@
+{
+  "name": "Comer.ar",
+  "short_name": "Comer.ar",
+  "description": "Ranking de lugares para comer, por amigos que les gusta comer",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#FF9100",
+  "background_color": "#FAFAFA",
+  "lang": "es-AR",
+  "icons": [
+    {
+      "src": "./fotos/imagenes/logoB.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./fotos/imagenes/logoB.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

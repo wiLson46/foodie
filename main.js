@@ -1,47 +1,47 @@
+(function () {
+'use strict';
+
+const CFG = window.COMER_CONFIG || {};
 
 // --- CONFIG & DATA ---
 const CONFIG = {
-    mainDataSheet: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv',
-    votesSheet: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1795075061',
+    mainDataSheet: CFG.MAIN_DATA_SHEET,
+    votesSheet: CFG.VOTES_SHEET,
     tabsData: {
         presencial: ['ranking', 'map'],
         delivery: ['ranking']
     }
 };
 
-// --- TRACKING ---
-const TRACKING_URL = 'https://script.google.com/macros/s/AKfycbxT0G-CwgaZgAZsKXdNgrMm5Bffl77ItglK_CtJyVYX1_OWeeI7Ze0eue1eO4fsujFw/exec';
+const TRACKING_URL = CFG.TRACKING_URL;
+const INITIAL_PHOTOS_LIMIT = CFG.INITIAL_PHOTOS_LIMIT || 6;
+const DEBUG = !!CFG.DEBUG;
 
 /**
- * Sends a tracking event silently (fire-and-forget)
+ * Sends a tracking event silently (fire-and-forget) using sendBeacon.
  */
 function trackEvent(event, restaurant) {
     if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') {
-        console.log('[Tracking] Ignorando evento en ambiente local (pruebas):', event, restaurant);
         return;
     }
     try {
         const body = { action: 'trackEvent', event };
         if (restaurant) body.restaurant = restaurant;
-        console.log('[Tracking] Enviando evento:', JSON.stringify(body));
-        fetch(TRACKING_URL, {
-            method: 'POST',
-            body: JSON.stringify(body),
-            redirect: 'follow',
-            headers: { 'Content-Type': 'text/plain' }
-        })
-        .then(res => {
-            console.log('[Tracking] Respuesta:', res.status, res.statusText, 'URL:', res.url);
-            return res.text();
-        })
-        .then(text => {
-            console.log('[Tracking] Body respuesta:', text.substring(0, 200));
-        })
-        .catch(err => {
-            console.warn('[Tracking] Error en fetch:', err.message || err);
-        });
+        const payload = JSON.stringify(body);
+        if (navigator.sendBeacon) {
+            const blob = new Blob([payload], { type: 'application/json' });
+            navigator.sendBeacon(TRACKING_URL, blob);
+        } else {
+            fetch(TRACKING_URL, {
+                method: 'POST',
+                body: payload,
+                redirect: 'follow',
+                headers: { 'Content-Type': 'application/json' },
+                keepalive: true
+            }).catch(() => {});
+        }
     } catch (e) {
-        console.warn('[Tracking] Error general:', e.message || e);
+        console.warn('[Tracking] Error:', e.message || e);
     }
 }
 
@@ -50,12 +50,11 @@ let _lucideTimer = null;
 function debouncedCreateIcons() {
     if (_lucideTimer) clearTimeout(_lucideTimer);
     _lucideTimer = setTimeout(() => {
-        lucide.createIcons();
+        if (window.lucide) lucide.createIcons();
         _lucideTimer = null;
     }, 50);
 }
 
-// Track if map has been loaded
 let mapLoaded = false;
 
 const MOCK_DATA = [
@@ -66,13 +65,28 @@ const MOCK_DATA = [
 ];
 
 // --- APP STATE ---
-let allRestaurants = []; // Stores all fetched restaurants
-let restaurants = []; // Restaurants filtered by currentMode
-let filteredRestaurants = []; // Restaurants filtered by both mode and location
+let allRestaurants = [];
+let restaurants = [];
+let filteredRestaurants = [];
 
-let currentSort = 'score'; // Default sort order
-let currentMode = 'presencial'; // 'presencial' | 'delivery'
-let publicVotes = {}; // { 'restaurant name (lowercase)': { avg: 8.5, count: 3 } }
+let currentSort = 'score';
+let currentMode = 'presencial';
+let currentLocation = 'all';
+let publicVotes = {};
+
+// Original meta state (to restore when leaving detail)
+const ORIGINAL_TITLE = document.title;
+let originalDescription = '';
+
+// Lightbox state
+let lightboxPhotos = [];
+let lightboxIndex = 0;
+let lightboxPreviousFocus = null;
+let lightboxTouchStartX = null;
+let currentDetailRestaurantName = '';
+
+// IntersectionObserver to pause/resume top-3 shimmer animation
+let topShimmerObserver = null;
 
 // --- DOM ELEMENTS (Cached) ---
 let rankingList, homeView, detailView, restaurantContent, backBtn, header;
@@ -81,9 +95,16 @@ let locationFilterContainer, locationFilter, sortFilter;
 
 // --- UTILITIES ---
 
-/**
- * Normalizes CSV data keys to lowercase and filters empty rows
- */
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 function normalizeData(data) {
     const filtered = data.filter(row => Object.values(row).some(v => String(v).trim() !== ""));
     return filtered.map(row => {
@@ -95,95 +116,69 @@ function normalizeData(data) {
     });
 }
 
-/**
- * Checks if fetched data is valid (not a login page HTML)
- */
 function isValidData(data) {
     if (!data || data.length === 0) return false;
     const firstRow = data[0];
     return !Object.keys(firstRow).some(k => k.includes('<!DOCTYPE') || k.includes('<html'));
 }
 
-/**
- * Fetches a single CSV sheet via Promise
- */
 function fetchSheet(url) {
-    // Auto-convert edit links if needed
     if (url.includes('/edit')) {
         url = url.replace(/\/edit.*$/, '/export?format=csv');
     }
-
-    console.log('[FetchSheet] Descargando CSV desde:', url);
 
     return new Promise((resolve, reject) => {
         Papa.parse(url, {
             download: true,
             header: true,
+            worker: true,
             complete: (results) => {
-                console.log('[FetchSheet] CSV parseado OK —', (results.data || []).length, 'filas, errores PapaParse:', results.errors?.length || 0);
-                if (results.errors?.length > 0) {
-                    console.warn('[FetchSheet] Errores de parseo:', results.errors.slice(0, 5));
+                if (results.errors?.length > 0 && DEBUG) {
+                    console.warn('[FetchSheet] Errores de parseo:', results.errors.slice(0, 3));
                 }
                 const normalized = normalizeData(results.data || []);
                 resolve(normalized);
             },
             error: (err) => {
                 console.error('[FetchSheet] Error descargando CSV:', url, err);
-                resolve([]); // Resolve with empty array to not break Promise.all
+                reject(err);
             }
         });
     });
 }
 
-/**
- * Fetches all data once and initializes the view
- */
-async function fetchData() {
-    // Show loading state
-    rankingList.innerHTML = '<div class="loader">Cargando la selección...</div>';
+function showErrorBanner(message, retry) {
+    if (!rankingList) return;
+    rankingList.innerHTML = `
+        <div class="error-banner" role="alert" style="text-align:center; padding:2rem; color:var(--text-muted);">
+            <p style="font-weight:600; margin-bottom:1rem;">${escapeHtml(message)}</p>
+            <button type="button" class="error-retry-btn" style="padding:0.6rem 1.5rem; border:2px solid var(--border); border-radius:10px; background:var(--card-bg); color:var(--text-main); font-weight:600; cursor:pointer;">
+                Reintentar
+            </button>
+        </div>
+    `;
+    const btn = rankingList.querySelector('.error-retry-btn');
+    if (btn && retry) btn.addEventListener('click', retry);
+}
 
+async function fetchData() {
     try {
-        // Fetch main data and votes in parallel
         const [mainData, votesData] = await Promise.all([
             fetchSheet(CONFIG.mainDataSheet),
-            fetchSheet(CONFIG.votesSheet)
+            fetchSheet(CONFIG.votesSheet).catch(() => [])
         ]);
 
-        // Process public votes
-        publicVotes = {};
-        if (votesData && votesData.length > 0) {
-            console.log('[Votes] Procesando', votesData.length, 'votos públicos');
-            votesData.forEach(v => {
-                const name = (v['lugar a votar'] || '').trim().toLowerCase();
-                const score = parseFloat(v['puntuar']);
-                if (name && !isNaN(score)) {
-                    if (!publicVotes[name]) {
-                        publicVotes[name] = { total: 0, count: 0 };
-                    }
-                    publicVotes[name].total += score;
-                    publicVotes[name].count++;
-                }
-            });
-            // Calculate averages
-            Object.keys(publicVotes).forEach(key => {
-                publicVotes[key].avg = (publicVotes[key].total / publicVotes[key].count).toFixed(1);
-            });
-            console.log('[Votes] Votos procesados:', publicVotes);
-        } else {
-            console.log('[Votes] No se encontraron votos públicos');
-        }
+        scheduleIdle(() => processVotes(votesData));
 
         if (isValidData(mainData)) {
             const hasName = Object.keys(mainData[0]).some(k => k === 'name' || k === 'nombre');
             if (hasName) {
-                // Determine critics from headers
                 const firstRowKeys = Object.keys(mainData[0]);
                 const criticNames = firstRowKeys
                     .filter(k => k.endsWith(' rating'))
                     .map(k => k.replace(' rating', '').trim());
 
                 allRestaurants = mainData.map((r, index) => {
-                    // Extract critics data for this restaurant
                     const critics = {};
                     criticNames.forEach(critic => {
                         if (r[`${critic} rating`]) {
@@ -202,7 +197,7 @@ async function fetchData() {
                         ...r,
                         name: r.name || r.nombre,
                         rating: r.rating || r.promedio || r.score || '0',
-                        rank: r.ranking || r.rank || index + 1, // Use ranking from data
+                        rank: r.ranking || r.rank || index + 1,
                         description: r.description || r.descripcion || '',
                         orderedBy: r['pedido por'] || r.pedido_por || '',
                         presencialDelivery: (r['presencial delivery'] || '').toUpperCase(),
@@ -210,31 +205,49 @@ async function fetchData() {
                     };
                 });
             } else {
-                console.warn("No 'name' column found, using MOCK_DATA");
                 allRestaurants = MOCK_DATA.map(m => ({ ...m, presencialDelivery: 'P', critics: {} }));
             }
         } else {
-            console.warn("Invalid or empty data, using MOCK_DATA");
             allRestaurants = MOCK_DATA.map(m => ({ ...m, presencialDelivery: 'P', critics: {} }));
         }
-
-        console.log("Datos cargados:", { mode: currentMode, allRestaurants });
     } catch (err) {
-        console.error('[FetchData] Error cargando datos del spreadsheet:', err);
-        console.error('[FetchData] Stack:', err.stack);
-        allRestaurants = MOCK_DATA.map(m => ({ ...m, presencialDelivery: 'P', critics: {} }));
+        console.error('[FetchData] Error:', err);
+        showErrorBanner('No pudimos cargar los datos. Revisá tu conexión.', () => {
+            renderSkeleton();
+            fetchData();
+        });
+        return;
     }
 
-    // Filter by the current mode immediately
     filterByMode();
-
-    // Handle hash navigation after data is loaded
-    handleHashChange();
+    handleRouteChange();
 }
 
-/**
- * Filters the master list by the current mode (presencial vs delivery)
- */
+function scheduleIdle(fn) {
+    if ('requestIdleCallback' in window) {
+        requestIdleCallback(fn, { timeout: 1000 });
+    } else {
+        setTimeout(fn, 0);
+    }
+}
+
+function processVotes(votesData) {
+    publicVotes = {};
+    if (!votesData || votesData.length === 0) return;
+    votesData.forEach(v => {
+        const name = (v['lugar a votar'] || '').trim().toLowerCase();
+        const score = parseFloat(v['puntuar']);
+        if (name && !isNaN(score)) {
+            if (!publicVotes[name]) publicVotes[name] = { total: 0, count: 0 };
+            publicVotes[name].total += score;
+            publicVotes[name].count++;
+        }
+    });
+    Object.keys(publicVotes).forEach(key => {
+        publicVotes[key].avg = (publicVotes[key].total / publicVotes[key].count).toFixed(1);
+    });
+}
+
 function filterByMode() {
     if (currentMode === 'presencial') {
         restaurants = allRestaurants.filter(r => r.presencialDelivery === 'P');
@@ -242,89 +255,85 @@ function filterByMode() {
         restaurants = allRestaurants.filter(r => r.presencialDelivery === 'D' || r.presencialDelivery === 'L');
     }
 
-    filteredRestaurants = [...restaurants];
     populateLocationFilter();
-    applySort(); // Apply sort resets filteredRestaurants based on new set
+    applyLocationFilter();
+}
+
+function applyLocationFilter() {
+    if (currentLocation === 'all') {
+        filteredRestaurants = [...restaurants];
+    } else {
+        filteredRestaurants = restaurants.filter(res => (res.location || 'Sin ubicación') === currentLocation);
+    }
+    applySort();
     renderRanking();
 }
 
-/**
- * Populates the location filter dropdown with unique locations
- */
 function populateLocationFilter() {
     if (!locationFilter) return;
 
-    // Extract unique locations
     const locations = new Set();
     restaurants.forEach(res => {
         const location = res.location || 'Sin ubicación';
         if (location) locations.add(location);
     });
 
-    // Clear existing options except "All"
-    locationFilter.innerHTML = '<option value="all">Todas las ubicaciones</option>';
+    const frag = document.createDocumentFragment();
+    const allOpt = document.createElement('option');
+    allOpt.value = 'all';
+    allOpt.textContent = 'Todas las ubicaciones';
+    frag.appendChild(allOpt);
 
-    // Add unique locations
     Array.from(locations).sort().forEach(location => {
         const option = document.createElement('option');
         option.value = location;
         option.textContent = location;
-        locationFilter.appendChild(option);
+        frag.appendChild(option);
     });
-}
 
-/**
- * Filters restaurants by location
- */
-function filterByLocation(selectedLocation) {
-    if (selectedLocation === 'all') {
-        filteredRestaurants = [...restaurants];
+    locationFilter.replaceChildren(frag);
+
+    // Restore selection if matches
+    if (currentLocation && Array.from(locationFilter.options).some(o => o.value === currentLocation)) {
+        locationFilter.value = currentLocation;
     } else {
-        filteredRestaurants = restaurants.filter(res => {
-            const location = res.location || 'Sin ubicación';
-            return location === selectedLocation;
-        });
+        currentLocation = 'all';
+        locationFilter.value = 'all';
     }
-    applySort();
-    renderRanking();
 }
 
-/**
- * Parses a date string in DD/MM/YYYY format
- */
+function filterByLocation(selectedLocation) {
+    currentLocation = selectedLocation;
+    applyLocationFilter();
+    syncFiltersToUrl();
+}
+
 function parseDate(dateStr) {
     if (!dateStr) return new Date(0);
     const parts = dateStr.split('/');
     if (parts.length === 3) {
-        // DD/MM/YYYY -> YYYY-MM-DD (ISO suitable for Date constructor)
         return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
     }
     return new Date(0);
 }
 
-/**
- * Sorts the filtered restaurants based on current criteria
- */
 function applySort() {
     filteredRestaurants.sort((a, b) => {
         if (currentSort === 'score') {
             const scoreA = parseFloat(a.rating) || 0;
             const scoreB = parseFloat(b.rating) || 0;
-            return scoreB - scoreA; // Descending
+            return scoreB - scoreA;
         } else if (currentSort === 'date') {
             const dateA = parseDate(a.date || a.fecha);
             const dateB = parseDate(b.date || b.fecha);
-            return dateB - dateA; // Newest first
+            return dateB - dateA;
         } else if (currentSort === 'name') {
-            return (a.name || '').localeCompare(b.name || ''); // A-Z
+            return (a.name || '').localeCompare(b.name || '');
         }
         return 0;
     });
 }
 
-/**
- * Gets medal class for top 3 rankings
- */
 function getMedalClass(rank) {
     if (rank === 1) return 'top-1';
     if (rank === 2) return 'top-2';
@@ -332,18 +341,28 @@ function getMedalClass(rank) {
     return '';
 }
 
-/**
- * Renders the ranking list
- */
+function renderSkeleton() {
+    if (!rankingList) return;
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < 8; i++) {
+        const sk = document.createElement('div');
+        sk.className = 'ranking-item-skeleton';
+        sk.setAttribute('aria-hidden', 'true');
+        frag.appendChild(sk);
+    }
+    rankingList.replaceChildren(frag);
+}
+
 function renderRanking() {
-    rankingList.innerHTML = '';
+    if (!rankingList) return;
     const dataToRender = filteredRestaurants.length > 0 ? filteredRestaurants : restaurants;
 
     if (dataToRender.length === 0) {
-        rankingList.innerHTML = '<div style="text-align: center; padding: 3rem; color: var(--text-muted);">No se encontraron restaurantes para esta ubicación.</div>';
-        lucide.createIcons();
+        rankingList.innerHTML = '<div style="text-align:center; padding:3rem; color:var(--text-muted);">No se encontraron restaurantes para esta ubicación.</div>';
         return;
     }
+
+    const frag = document.createDocumentFragment();
 
     dataToRender.forEach((res, i) => {
         const item = document.createElement('div');
@@ -351,62 +370,83 @@ function renderRanking() {
         const medalClass = getMedalClass(rank);
         const visitDate = res.date || res.fecha || '';
         const rating = res.rating || '0';
+        const safeName = escapeHtml(res.name);
+        const safeLocation = escapeHtml(res.location || 'Luxury');
+        const safeDate = escapeHtml(visitDate);
+        const safeRating = escapeHtml(rating);
 
         item.className = `ranking-item ${medalClass}`;
+        item.setAttribute('role', 'button');
+        item.setAttribute('tabindex', '0');
+        item.setAttribute('aria-label', `Ver detalle de ${res.name || ''}`);
         item.innerHTML = `
             <div class="rank-number">${rank}</div>
             <div class="restaurant-info">
                 <div class="restaurant-name-row">
-                    <h3 class="restaurant-name">${res.name}</h3>
+                    <h3 class="restaurant-name">${safeName}</h3>
                     ${visitDate ? `
                     <div class="ranking-date-box">
                         <div class="date-label">VISITADO EL</div>
-                        <div class="date-value">${visitDate}</div>
+                        <div class="date-value">${safeDate}</div>
                     </div>` : ''}
                 </div>
-                <p class="restaurant-location">${res.location || 'Luxury'}</p>
+                <p class="restaurant-location">${safeLocation}</p>
             </div>
             <div class="score-box">
                 <div class="score-label">Puntaje</div>
-                <div class="score-value">${rating}</div>
+                <div class="score-value">${safeRating}</div>
             </div>
-            <i data-lucide="arrow-right-circle"></i>
+            <i data-lucide="arrow-right-circle" aria-hidden="true"></i>
         `;
-        item.addEventListener('click', () => showDetail(res));
-        rankingList.appendChild(item);
+        const handler = () => showDetail(res);
+        item.addEventListener('click', handler);
+        item.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handler();
+            }
+        });
+        frag.appendChild(item);
     });
+
+    rankingList.replaceChildren(frag);
     debouncedCreateIcons();
 
-    // Performance: Only stagger-animate first 8 items, rest appear instantly
     const MAX_ANIMATED = 8;
-    const allItems = document.querySelectorAll('.ranking-item');
+    const allItems = rankingList.querySelectorAll('.ranking-item');
     const animatedItems = Array.from(allItems).slice(0, MAX_ANIMATED);
     const instantItems = Array.from(allItems).slice(MAX_ANIMATED);
 
-    if (animatedItems.length > 0) {
+    if (animatedItems.length > 0 && window.gsap) {
         gsap.to(animatedItems, { opacity: 1, y: 0, stagger: 0.08, duration: 0.5, ease: "power4.out" });
     }
-    if (instantItems.length > 0) {
+    if (instantItems.length > 0 && window.gsap) {
         gsap.set(instantItems, { opacity: 1, y: 0 });
     }
+
+    setupTopShimmerObserver();
+}
+
+function setupTopShimmerObserver() {
+    if (!('IntersectionObserver' in window)) return;
+    if (topShimmerObserver) topShimmerObserver.disconnect();
+
+    topShimmerObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+            entry.target.classList.toggle('shimmer-active', entry.isIntersecting);
+        });
+    }, { threshold: 0.1 });
+
+    rankingList.querySelectorAll('.top-1, .top-2, .top-3').forEach((el) => {
+        topShimmerObserver.observe(el);
+    });
 }
 
 // --- DETAIL VIEW HELPERS ---
 
-/**
- * Generates photos gallery HTML with progressive lazy loading
- */
-const INITIAL_PHOTOS_LIMIT = 6;
-
-/**
- * Converts a full-resolution photo URL to its thumbnail equivalent.
- * Maps ./fotos/DATE/FILE.JPEG → ./fotos_thumb/DATE/FILE.jpg
- */
 function getThumbnailUrl(originalUrl) {
     if (!originalUrl) return originalUrl;
-    // Replace 'fotos/' with 'fotos_thumb/' and force .jpg extension
     let thumb = originalUrl.replace(/\/fotos\//, '/fotos_thumb/').replace(/\bfotos\//, 'fotos_thumb/');
-    // Change extension to .jpg (thumbnails are always JPEG)
     thumb = thumb.replace(/\.(jpeg|jpg|png|webp)$/i, '.jpg');
     return thumb;
 }
@@ -414,9 +454,9 @@ function getThumbnailUrl(originalUrl) {
 function generatePhotosGalleryHTML(photosString) {
     if (!photosString || !photosString.trim()) {
         return `
-            <div style="margin-top: 1.5rem; padding: 2rem; text-align: center; color: var(--text-muted);">
-                <i data-lucide="image-off" style="width: 48px; height: 48px; margin: 0 auto 1rem; opacity: 0.3;"></i>
-                <p style="font-size: 1rem;">No hay fotos para este evento</p>
+            <div style="margin-top:1.5rem; padding:2rem; text-align:center; color:var(--text-muted);">
+                <i data-lucide="image-off" style="width:48px; height:48px; margin:0 auto 1rem; opacity:0.3;"></i>
+                <p style="font-size:1rem;">No hay fotos para este evento</p>
             </div>
         `;
     }
@@ -425,36 +465,29 @@ function generatePhotosGalleryHTML(photosString) {
     const initialPhotos = photos.slice(0, INITIAL_PHOTOS_LIMIT);
     const remainingPhotos = photos.slice(INITIAL_PHOTOS_LIMIT);
     const hasMore = remainingPhotos.length > 0;
+    const total = photos.length;
+    const initialCount = initialPhotos.length;
 
     return `
-        <div class="gallery" id="photo-gallery" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 1.5rem;">
+        <div class="gallery" id="photo-gallery" style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-top:1.5rem;">
             ${initialPhotos.map(img => `
                 <div class="gallery-img-wrapper">
-                    <img data-src="${getThumbnailUrl(img)}" data-full="${img}" class="gallery-img gallery-lazy" decoding="async"
-                        style="width: 100%; height: 100%; object-fit: cover; cursor: pointer;"
-                        onclick="openLightbox('${img}')">
+                    <img data-src="${escapeHtml(getThumbnailUrl(img))}" data-full="${escapeHtml(img)}" class="gallery-img gallery-lazy" decoding="async" loading="lazy" width="400" height="400" alt="Foto del restaurante" style="width:100%; height:100%; object-fit:cover; cursor:pointer;">
                 </div>
             `).join('')}
         </div>
+        <div class="gallery-progress" id="gallery-progress" style="text-align:center; margin-top:0.75rem; color:var(--text-muted); font-size:0.85rem; font-family:var(--font-body);">${initialCount} de ${total} ${total === 1 ? 'foto' : 'fotos'}</div>
         ${hasMore ? `
-        <div id="gallery-more-container" style="text-align: center; margin-top: 1rem;">
-            <button id="gallery-show-more" onclick="showMorePhotos()" style="
-                padding: 0.6rem 1.5rem; border: 2px solid var(--border); border-radius: 10px;
-                background: var(--card-bg); color: var(--text-main); font-family: var(--font-title);
-                font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.3s ease;">
+        <div id="gallery-more-container" style="text-align:center; margin-top:1rem;">
+            <button id="gallery-show-more" type="button" style="padding:0.6rem 1.5rem; border:2px solid var(--border); border-radius:10px; background:var(--card-bg); color:var(--text-main); font-family:var(--font-title); font-weight:600; font-size:0.85rem; cursor:pointer; transition:all 0.3s ease;">
                 Ver ${remainingPhotos.length} foto${remainingPhotos.length > 1 ? 's' : ''} más
             </button>
         </div>
-        <template id="remaining-photos-data" data-photos='${JSON.stringify(remainingPhotos)}'></template>
+        <template id="remaining-photos-data" data-photos='${escapeHtml(JSON.stringify(remainingPhotos))}'></template>
         ` : ''}
     `;
 }
 
-/**
- * Sets up IntersectionObserver for progressive blur-up image loading.
- * Images load when near viewport, start blurred, then transition to sharp.
- * Loading is staggered to prevent simultaneous decoding frame drops.
- */
 let galleryObserver = null;
 let galleryLoadQueue = [];
 let galleryLoadTimer = null;
@@ -468,20 +501,15 @@ function processGalleryQueue() {
     const img = galleryLoadQueue.shift();
     const src = img.getAttribute('data-src');
     if (!src) {
-        // Skip and process next
         processGalleryQueue();
         return;
     }
 
-    // Set the src — browser starts downloading
     img.src = src;
     img.removeAttribute('data-src');
-
-    // Show the image immediately (blurred via CSS)
     img.style.opacity = '1';
 
     img.addEventListener('load', () => {
-        // Image fully decoded — trigger blur-to-sharp transition
         requestAnimationFrame(() => {
             img.classList.add('loaded');
             const wrapper = img.closest('.gallery-img-wrapper');
@@ -489,24 +517,20 @@ function processGalleryQueue() {
         });
     }, { once: true });
 
-    // Handle cached/already-loaded images
     if (img.complete && img.naturalWidth > 0) {
         img.classList.add('loaded');
         const wrapper = img.closest('.gallery-img-wrapper');
         if (wrapper) wrapper.classList.add('loaded');
     }
 
-    // Stagger next image by 150ms to avoid simultaneous decoding
     galleryLoadTimer = setTimeout(processGalleryQueue, 150);
 }
 
 function setupGalleryObserver() {
-    // Disconnect previous observer if exists
     if (galleryObserver) {
         galleryObserver.disconnect();
         galleryObserver = null;
     }
-    // Clear any pending load queue
     if (galleryLoadTimer) {
         clearTimeout(galleryLoadTimer);
         galleryLoadTimer = null;
@@ -516,29 +540,21 @@ function setupGalleryObserver() {
     const lazyImages = document.querySelectorAll('.gallery-lazy:not(.loaded)');
     if (lazyImages.length === 0) return;
 
-    // Use IntersectionObserver for efficient lazy loading
     if ('IntersectionObserver' in window) {
         galleryObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
-                    const img = entry.target;
-                    // Add to load queue instead of loading immediately
-                    galleryLoadQueue.push(img);
-                    galleryObserver.unobserve(img);
+                    galleryLoadQueue.push(entry.target);
+                    galleryObserver.unobserve(entry.target);
                 }
             });
-            // Start processing queue if not already running
             if (galleryLoadQueue.length > 0 && !galleryLoadTimer) {
                 processGalleryQueue();
             }
-        }, {
-            rootMargin: '200px',
-            threshold: 0.01
-        });
+        }, { rootMargin: '200px', threshold: 0.01 });
 
         lazyImages.forEach(img => galleryObserver.observe(img));
     } else {
-        // Fallback: load all images immediately
         lazyImages.forEach(img => {
             img.src = img.getAttribute('data-src');
             img.removeAttribute('data-src');
@@ -550,56 +566,74 @@ function setupGalleryObserver() {
     }
 }
 
-/**
- * Expands gallery to show remaining photos
- */
-window.showMorePhotos = function() {
+function setupGalleryClickDelegation() {
+    const gallery = document.getElementById('photo-gallery');
+    if (gallery) {
+        gallery.addEventListener('click', (e) => {
+            const img = e.target.closest('.gallery-img');
+            if (img && img.dataset.full) openLightbox(img.dataset.full);
+        });
+    }
+    const moreBtn = document.getElementById('gallery-show-more');
+    if (moreBtn) {
+        moreBtn.addEventListener('click', showMorePhotos);
+    }
+}
+
+function showMorePhotos() {
     const template = document.getElementById('remaining-photos-data');
     const gallery = document.getElementById('photo-gallery');
     const moreContainer = document.getElementById('gallery-more-container');
+    const progress = document.getElementById('gallery-progress');
 
     if (!template || !gallery) return;
 
     try {
         const remainingPhotos = JSON.parse(template.getAttribute('data-photos') || '[]');
+        const frag = document.createDocumentFragment();
 
-        // Append remaining photos to gallery
         remainingPhotos.forEach(img => {
             const wrapper = document.createElement('div');
             wrapper.className = 'gallery-img-wrapper';
 
             const imgEl = document.createElement('img');
             imgEl.setAttribute('data-src', getThumbnailUrl(img));
-            imgEl.setAttribute('data-full', img);
+            imgEl.dataset.full = img;
             imgEl.className = 'gallery-img gallery-lazy';
             imgEl.decoding = 'async';
-            imgEl.style.cssText = 'width: 100%; height: 100%; object-fit: cover; cursor: pointer;';
-            imgEl.onclick = () => openLightbox(img);
+            imgEl.loading = 'lazy';
+            imgEl.width = 400;
+            imgEl.height = 400;
+            imgEl.alt = 'Foto del restaurante';
+            imgEl.style.cssText = 'width:100%; height:100%; object-fit:cover; cursor:pointer;';
 
             wrapper.appendChild(imgEl);
-            gallery.appendChild(wrapper);
+            frag.appendChild(wrapper);
         });
 
-        // Remove the "show more" button and template
+        gallery.appendChild(frag);
+
         if (moreContainer) moreContainer.remove();
         template.remove();
 
-        // Re-observe new images
+        if (progress) {
+            const total = gallery.querySelectorAll('.gallery-img').length;
+            progress.textContent = `${total} de ${total} ${total === 1 ? 'foto' : 'fotos'}`;
+        }
+
         setupGalleryObserver();
 
     } catch (e) {
         console.warn('[Gallery] Error loading more photos:', e);
     }
-};
+}
+window.showMorePhotos = showMorePhotos;
 
-/**
- * Generates scores table HTML
- */
 function generateScoresTableHTML(res) {
     if (!res.critics || Object.keys(res.critics).length === 0) {
         return `
-            <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
-                <p style="font-size: 0.9rem;">No hay detalles de puntajes para este lugar.</p>
+            <div style="padding:2rem; text-align:center; color:var(--text-muted);">
+                <p style="font-size:0.9rem;">No hay detalles de puntajes para este lugar.</p>
             </div>
         `;
     }
@@ -615,22 +649,20 @@ function generateScoresTableHTML(res) {
 
         let col3, col4;
         if (isDelivery) {
-            // Delivery columns: Presentacion, Precio
             col3 = criticRes.presentacion || '-';
             col4 = criticRes.precio || '-';
         } else {
-            // Presencial columns: Lugar, Atencion
             col3 = criticRes.lugar || '-';
             col4 = criticRes.atencion || '-';
         }
 
         rowsHtml += `
             <tr class="score-row">
-                <td class="col-critic">${critic}</td>
-                <td class="col-score col-avg">${avg}</td>
-                <td class="col-score">${food}</td>
-                <td class="col-score">${col3}</td>
-                <td class="col-score">${col4}</td>
+                <td class="col-critic">${escapeHtml(critic)}</td>
+                <td class="col-score col-avg">${escapeHtml(avg)}</td>
+                <td class="col-score">${escapeHtml(food)}</td>
+                <td class="col-score">${escapeHtml(col3)}</td>
+                <td class="col-score">${escapeHtml(col4)}</td>
             </tr>
         `;
     });
@@ -639,14 +671,14 @@ function generateScoresTableHTML(res) {
         <table class="scores-table">
             <thead>
                 <tr class="score-header-row">
-                    <th style="text-align: left;">Crítico</th>
+                    <th style="text-align:left;">Crítico</th>
                     <th>Prom.</th>
-                    <th><i data-lucide="utensils" class="header-icon"></i> Comida</th>
+                    <th><i data-lucide="utensils" class="header-icon" aria-hidden="true"></i> Comida</th>
                     ${isDelivery ?
-            `<th><i data-lucide="box" class="header-icon"></i> Presentación</th>
-                     <th><i data-lucide="dollar-sign" class="header-icon"></i> Precio</th>` :
-            `<th><i data-lucide="armchair" class="header-icon"></i> Lugar</th>
-                     <th><i data-lucide="thumbs-up" class="header-icon"></i> Atención</th>`
+            `<th><i data-lucide="box" class="header-icon" aria-hidden="true"></i> Presentación</th>
+                     <th><i data-lucide="dollar-sign" class="header-icon" aria-hidden="true"></i> Precio</th>` :
+            `<th><i data-lucide="armchair" class="header-icon" aria-hidden="true"></i> Lugar</th>
+                     <th><i data-lucide="thumbs-up" class="header-icon" aria-hidden="true"></i> Atención</th>`
         }
                 </tr>
             </thead>
@@ -657,53 +689,102 @@ function generateScoresTableHTML(res) {
     `;
 }
 
-/**
- * Converts restaurant name to URL-safe slug
- */
 function getRestaurantSlug(name) {
     if (!name) return '';
     return String(name).toLowerCase()
         .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
+        .replace(new RegExp('[̀-ͯ]', 'g'), '')
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
 }
 
-/**
- * Finds restaurant by slug
- */
 function findRestaurantBySlug(slug) {
-    return restaurants.find(r => getRestaurantSlug(r.name) === slug);
+    return restaurants.find(r => getRestaurantSlug(r.name) === slug)
+        || allRestaurants.find(r => getRestaurantSlug(r.name) === slug);
 }
 
-/**
- * Shows restaurant detail view
- */
-function showDetail(res, updateHash = true) {
-    console.log("--- DEBUG DETALLE ---");
-    console.log("Datos del restaurante:", res);
+function setMeta(name, content, isProperty) {
+    const attr = isProperty ? 'property' : 'name';
+    let el = document.querySelector(`meta[${attr}="${name}"]`);
+    if (!el) {
+        el = document.createElement('meta');
+        el.setAttribute(attr, name);
+        document.head.appendChild(el);
+    }
+    el.setAttribute('content', content);
+}
 
-    // Track detail view only on the initial call (not on hashchange re-entry)
-    if (updateHash) {
+function updateMetaForDetail(res) {
+    const title = `${res.name || ''} — Comer.ar`;
+    document.title = title;
+    const desc = (res.description || res.location || ORIGINAL_TITLE).slice(0, 155);
+    setMeta('description', desc);
+    setMeta('og:title', title, true);
+    setMeta('og:description', desc, true);
+    setMeta('og:type', 'restaurant.restaurant', true);
+    setMeta('og:url', window.location.href, true);
+    setMeta('twitter:title', title);
+    setMeta('twitter:description', desc);
+
+    // JSON-LD Restaurant schema
+    let ldEl = document.getElementById('restaurant-jsonld');
+    if (!ldEl) {
+        ldEl = document.createElement('script');
+        ldEl.type = 'application/ld+json';
+        ldEl.id = 'restaurant-jsonld';
+        document.head.appendChild(ldEl);
+    }
+    const ld = {
+        '@context': 'https://schema.org',
+        '@type': 'Restaurant',
+        name: res.name || '',
+        description: res.description || '',
+        address: res.address || res.direccion || '',
+        telephone: res.phone || res.telefono || '',
+        aggregateRating: {
+            '@type': 'AggregateRating',
+            ratingValue: res.rating || '0',
+            bestRating: '10',
+            ratingCount: 1
+        }
+    };
+    ldEl.textContent = JSON.stringify(ld);
+}
+
+function restoreOriginalMeta() {
+    document.title = ORIGINAL_TITLE;
+    setMeta('description', originalDescription);
+    setMeta('og:title', ORIGINAL_TITLE, true);
+    setMeta('og:description', originalDescription, true);
+    setMeta('og:type', 'website', true);
+    setMeta('og:url', window.location.origin + window.location.pathname, true);
+    const ldEl = document.getElementById('restaurant-jsonld');
+    if (ldEl) ldEl.remove();
+}
+
+function showDetail(res, updateUrl = true) {
+    if (updateUrl) {
         trackEvent('detail_view', res.name);
     }
 
-    // Update URL hash if needed
-    if (updateHash) {
-        const slug = getRestaurantSlug(res.name);
-        const expectedHash = `#restaurant/${slug}`;
-        if (window.location.hash !== expectedHash) {
-            window.location.hash = expectedHash;
-            return; // Let the hashchange event listener handle the actual rendering
+    const slug = getRestaurantSlug(res.name);
+    if (updateUrl) {
+        try {
+            history.pushState({ slug }, '', '?r=' + encodeURIComponent(slug));
+        } catch (e) {
+            window.location.hash = '#restaurant/' + slug;
+            return;
         }
     }
+
+    currentDetailRestaurantName = res.name || '';
+    updateMetaForDetail(res);
 
     const visitDate = res.date || res.fecha || '';
     const rating = res.rating || '0';
     const rank = parseInt(res.rank || 0);
     const medalClass = getMedalClass(rank);
 
-    // Location data
     const address = res.address || res.direccion || '';
     const phone = res.phone || res.telefono || '';
     const instagram = res.instagram || '';
@@ -712,220 +793,115 @@ function showDetail(res, updateHash = true) {
 
     const instagramLink = instagram ? `https://instagram.com/${instagram.replace('@', '').replace('https://instagram.com/', '')}` : '';
 
-    // Find photos
     const photosString = res.fotos || res.images || res.photos || '';
+
+    const voteKey = (res.name || '').trim().toLowerCase();
+    const voteData = publicVotes[voteKey];
+    const publicScore = voteData ? voteData.avg : '-';
+    const voteCount = voteData ? voteData.count : 0;
+
+    const safeName = escapeHtml(res.name);
+    const safeLocation = escapeHtml(res.location || 'Global Selection');
+    const safeDescription = escapeHtml(res.description || '');
+    const safeRating = escapeHtml(rating);
+    const safeDate = escapeHtml(visitDate);
+    const safeAddress = escapeHtml(address);
+    const safePhone = escapeHtml(phone);
+    const safeMapLink = escapeHtml(mapLink);
+    const safeInstagramLink = escapeHtml(instagramLink);
+    const safeOrderedBy = escapeHtml(orderedBy);
+    const safePublic = escapeHtml(publicScore);
 
     restaurantContent.innerHTML = `
         <div class="detail-header">
             <div class="detail-header-grid">
-                <!-- Rank -->
                 <div class="detail-rank ${medalClass}">${rank > 0 ? rank : '-'}</div>
-                
-                <!-- Title -->
-                <h1 class="detail-title">${res.name}</h1>
-                
-                <!-- Date -->
+                <h1 class="detail-title">${safeName}</h1>
                 <div class="detail-date-box">
                     <div class="date-label">VISITADO EL</div>
-                    <div class="date-value">${visitDate}</div>
+                    <div class="date-value">${safeDate}</div>
                 </div>
 
-                <!-- Scores Wrapper -->
                 <div class="scores-wrapper">
-                    <!-- Comer.ar Score -->
                     <div class="detail-score-box">
                         <div class="score-label">Puntaje de Comer.ar</div>
-                        <div class="score-value">${rating}</div>
+                        <div class="score-value">${safeRating}</div>
                     </div>
 
-                    <!-- Public Score -->
-                    ${(() => {
-                        const voteKey = (res.name || '').trim().toLowerCase();
-                        const voteData = publicVotes[voteKey];
-                        const publicScore = voteData ? voteData.avg : '-';
-                        const voteCount = voteData ? voteData.count : 0;
-                        return `
                     <div class="detail-score-box public-score-box">
                         <div class="score-label">Puntaje del Público</div>
                         <div class="score-value-row">
-                            <div class="score-value">${publicScore}</div>
+                            <div class="score-value">${safePublic}</div>
                             <div class="votes-pill">${voteCount} ${voteCount === 1 ? 'voto' : 'votos'}</div>
                         </div>
                     </div>
-                        `;
-                    })()}
 
-                    <!-- Vote Button -->
-                    <button class="vote-btn" onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSccteyXdae90sOgyONjnyXqJCjRWk211Vjk89aMDR0_3qyr-A/viewform', '_blank')">
-                        <i data-lucide="star"></i>
+                    <button class="vote-btn" type="button" id="vote-btn">
+                        <i data-lucide="star" aria-hidden="true"></i>
                         <span>Votá acá</span>
                     </button>
                 </div>
 
-                <!-- Location -->
-                <p class="detail-location">${res.location || 'Global Selection'}</p>
-                
-                <!-- Description -->
-                <div class="detail-description">
-                    <p>${res.description || ''}</p>
-                </div>
-                
-            </div>
+                <p class="detail-location">${safeLocation}</p>
 
+                <div class="detail-description">
+                    <p>${safeDescription}</p>
+                </div>
             </div>
         </div>
-        
+
         <div class="detail-info-list">
-            <!-- 1) Dirección -->
             <div class="info-item ${address ? 'active' : 'inactive'}">
-                <i data-lucide="map-pin"></i>
-                <span>${address || 'Dirección no disponible'}</span>
+                <i data-lucide="map-pin" aria-hidden="true"></i>
+                <span>${safeAddress || 'Dirección no disponible'}</span>
             </div>
 
-            <!-- 2) Teléfono -->
             <div class="info-item ${phone ? 'active' : 'inactive'}">
-                <i data-lucide="phone"></i>
-                <span>${phone || 'Teléfono no disponible'}</span>
+                <i data-lucide="phone" aria-hidden="true"></i>
+                <span>${safePhone || 'Teléfono no disponible'}</span>
             </div>
 
-            <!-- 3) Instagram -->
             ${instagramLink ?
-            `<a href="${instagramLink}" target="_blank" class="info-item active link">
-                    <i data-lucide="instagram"></i>
+            `<a href="${safeInstagramLink}" target="_blank" rel="noopener" class="info-item active link">
+                    <i data-lucide="instagram" aria-hidden="true"></i>
                     <span>Ver el IG del local</span>
                 </a>` :
             `<div class="info-item inactive">
-                    <i data-lucide="instagram"></i>
+                    <i data-lucide="instagram" aria-hidden="true"></i>
                     <span>Ver el IG del local</span>
                 </div>`
         }
 
-            <!-- 4) Mapa (Presencial only) -->
             ${(mapLink && currentMode === 'presencial') ?
-            `<a href="${mapLink}" target="_blank" class="info-item active link">
-                    <i data-lucide="map"></i>
+            `<a href="${safeMapLink}" target="_blank" rel="noopener" class="info-item active link">
+                    <i data-lucide="map" aria-hidden="true"></i>
                     <span>Ir al local</span>
                 </a>` :
             (currentMode === 'presencial' ? `<div class="info-item inactive">
-                    <i data-lucide="map"></i>
+                    <i data-lucide="map" aria-hidden="true"></i>
                     <span>Ir al local</span>
                 </div>` : '')
         }
 
-            <!-- 5) Pedido por (Delivery only) -->
              ${orderedBy ?
             `<div class="info-item active">
-                    <i data-lucide="shopping-bag"></i>
-                    <span>Pedido por: <strong>${orderedBy}</strong></span>
+                    <i data-lucide="shopping-bag" aria-hidden="true"></i>
+                    <span>Pedido por: <strong>${safeOrderedBy}</strong></span>
                 </div>` : ''
         }
         </div>
-        
+
         <div class="detail-tabs-container">
             <div class="sub-tabs">
-                <button class="sub-tab-btn active" data-subtab="fotos">Fotos</button>
-                <button class="sub-tab-btn" data-subtab="puntajes">Puntajes</button>
+                <button class="sub-tab-btn active" type="button" data-subtab="fotos">Fotos</button>
+                <button class="sub-tab-btn" type="button" data-subtab="puntajes">Puntajes</button>
             </div>
-            
+
             <div id="fotos-content" class="sub-tab-content">
                 ${generatePhotosGalleryHTML(photosString)}
             </div>
-            
+
             <div id="puntajes-content" class="sub-tab-content hidden">
-                <style>
-                    .scores-table-container {
-                        background: rgba(255, 255, 255, 0.85);
-                        border: 1px solid rgba(255, 255, 255, 0.6);
-                        border-radius: 12px;
-                        padding: 1rem;
-                        overflow-x: auto;
-                    }
-                    .dark-mode .scores-table-container {
-                        background: rgba(30, 30, 30, 0.4);
-                        border-color: rgba(255, 255, 255, 0.1);
-                    }
-                    .scores-table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        min-width: 300px;
-                    }
-                    
-                    /* Headers */
-                    .score-header-row th {
-                        text-align: center;
-                        padding-bottom: 1rem;
-                        border-bottom: 1px solid rgba(0,0,0,0.1);
-                        color: var(--text-muted);
-                        font-family: var(--font-body);
-                        font-weight: 600;
-                        font-size: 0.8rem;
-                        text-transform: uppercase;
-                        letter-spacing: 0.05em;
-                        vertical-align: middle;
-                    }
-                    .dark-mode .score-header-row th {
-                        border-bottom-color: rgba(255,255,255,0.1);
-                    }
-                    .header-icon {
-                        width: 16px;
-                        height: 16px;
-                        margin-right: 4px;
-                        vertical-align: text-bottom;
-                        opacity: 0.7;
-                    }
-
-                    /* Rows */
-                    .score-row td {
-                        padding: 1rem 0;
-                        text-align: center;
-                        border-bottom: 1px solid rgba(0,0,0,0.05);
-                        vertical-align: middle;
-                    }
-                    .score-row:last-child td {
-                        border-bottom: none;
-                        padding-bottom: 0;
-                    }
-                    .dark-mode .score-row td {
-                        border-bottom-color: rgba(255,255,255,0.05);
-                    }
-
-                    /* Columns */
-                    .col-critic {
-                        text-align: left !important;
-                        font-family: var(--font-title);
-                        font-weight: 700;
-                        text-transform: capitalize;
-                        font-size: 1.05rem;
-                        width: 25%;
-                    }
-                    .col-score {
-                        font-family: var(--font-title);
-                        font-weight: 600;
-                        font-size: 1rem;
-                        width: 18%;
-                        position: relative;
-                    }
-                    /* Vertical Dividers */
-                    .col-score::before {
-                        content: '';
-                        position: absolute;
-                        left: 0;
-                        top: 25%;
-                        bottom: 25%;
-                        width: 1px;
-                        background-color: rgba(0,0,0,0.1);
-                    }
-                    .dark-mode .col-score::before {
-                        background-color: rgba(255,255,255,0.1);
-                    }
-
-                    .col-avg {
-                        font-weight: 800;
-                        font-size: 1.1rem;
-                        color: var(--text-main);
-                        width: 15%;
-                    }
-                </style>
                 <div class="scores-table-container">
                     ${generateScoresTableHTML(res)}
                 </div>
@@ -933,87 +909,135 @@ function showDetail(res, updateHash = true) {
         </div>
     `;
 
-    // Initialize icons for new content (debounced to avoid redundant DOM scans)
+    const voteBtn = document.getElementById('vote-btn');
+    if (voteBtn) {
+        voteBtn.addEventListener('click', () => {
+            window.open('https://docs.google.com/forms/d/e/1FAIpQLSccteyXdae90sOgyONjnyXqJCjRWk211Vjk89aMDR0_3qyr-A/viewform', '_blank', 'noopener');
+        });
+    }
+
     debouncedCreateIcons();
-
-    // Sub-tab logic
     setupSubTabs();
-
-    // Setup progressive image loading for gallery
     setupGalleryObserver();
+    setupGalleryClickDelegation();
 
-    // Transition animation
-    const tl = gsap.timeline();
-    tl.to(homeView, {
-        opacity: 0, duration: 0.3, onComplete: () => {
-            homeView.classList.add('hidden');
-            detailView.classList.remove('hidden');
-            gsap.fromTo('.detail-container', { opacity: 0 }, { opacity: 1, duration: 0.5 });
-        }
-    });
+    if (window.gsap) {
+        const tl = gsap.timeline();
+        tl.to(homeView, {
+            opacity: 0, duration: 0.3, onComplete: () => {
+                homeView.classList.add('hidden');
+                detailView.classList.remove('hidden');
+                gsap.fromTo('.detail-container', { opacity: 0 }, { opacity: 1, duration: 0.5 });
+            }
+        });
+    } else {
+        homeView.classList.add('hidden');
+        detailView.classList.remove('hidden');
+    }
 }
 
-/**
- * Sets up sub-tab switching logic
- */
 function setupSubTabs() {
     document.querySelectorAll('.sub-tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const target = btn.getAttribute('data-subtab');
-
-            // Update buttons
             document.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-
-            // Update content
             document.querySelectorAll('.sub-tab-content').forEach(content => content.classList.add('hidden'));
             document.getElementById(`${target}-content`).classList.remove('hidden');
         });
     });
 }
 
-/**
- * Toggles back to home view
- */
-function toggleHome(updateHash = true) {
-    const tl = gsap.timeline();
-    tl.to('.detail-container', {
-        opacity: 0, duration: 0.3, onComplete: () => {
-            detailView.classList.add('hidden');
-            homeView.classList.remove('hidden');
-        }
-    });
-    tl.to(homeView, { opacity: 1, duration: 0.4 });
+function toggleHome(updateUrl = true) {
+    if (window.gsap) {
+        const tl = gsap.timeline();
+        tl.to('.detail-container', {
+            opacity: 0, duration: 0.3, onComplete: () => {
+                detailView.classList.add('hidden');
+                homeView.classList.remove('hidden');
+            }
+        });
+        tl.to(homeView, { opacity: 1, duration: 0.4 });
+    } else {
+        detailView.classList.add('hidden');
+        homeView.classList.remove('hidden');
+    }
 
-    // Clear hash when going back to home
-    if (updateHash && window.location.hash) {
-        history.pushState('', document.title, window.location.pathname + window.location.search);
+    restoreOriginalMeta();
+    currentDetailRestaurantName = '';
+
+    if (updateUrl) {
+        try {
+            const url = new URL(window.location.href);
+            url.search = syncFiltersToParams(new URLSearchParams()).toString();
+            const queryString = url.search;
+            history.pushState({}, '', window.location.pathname + queryString + '');
+        } catch (e) {
+            if (window.location.hash) {
+                history.pushState('', document.title, window.location.pathname + window.location.search);
+            }
+        }
     }
 }
 
-// --- HASH NAVIGATION ---
+// --- ROUTING ---
 
-/**
- * Handles hash changes for navigation
- */
-function handleHashChange() {
-    const hash = window.location.hash.slice(1); // Remove #
+function syncFiltersToParams(params) {
+    if (currentMode && currentMode !== 'presencial') params.set('mode', currentMode);
+    else params.delete('mode');
+    if (currentSort && currentSort !== 'score') params.set('sort', currentSort);
+    else params.delete('sort');
+    if (currentLocation && currentLocation !== 'all') params.set('location', currentLocation);
+    else params.delete('location');
+    return params;
+}
 
-    if (hash.startsWith('restaurant/')) {
-        const slug = hash.replace('restaurant/', '');
+function syncFiltersToUrl() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        // Preserve r= if present (detail view)
+        const r = params.get('r');
+        params.delete('mode'); params.delete('sort'); params.delete('location');
+        syncFiltersToParams(params);
+        if (r) params.set('r', r);
+        const qs = params.toString();
+        const newUrl = window.location.pathname + (qs ? '?' + qs : '');
+        history.replaceState(history.state, '', newUrl);
+    } catch (e) {}
+}
+
+function readFiltersFromUrl() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const m = params.get('mode');
+        const s = params.get('sort');
+        const l = params.get('location');
+        if (m === 'presencial' || m === 'delivery') currentMode = m;
+        if (s === 'score' || s === 'date' || s === 'name') currentSort = s;
+        if (l) currentLocation = l;
+    } catch (e) {}
+}
+
+function handleRouteChange() {
+    let slug = '';
+    try {
+        const params = new URLSearchParams(window.location.search);
+        slug = params.get('r') || '';
+    } catch (e) {}
+    if (!slug) {
+        const hash = window.location.hash.slice(1);
+        if (hash.startsWith('restaurant/')) slug = hash.replace('restaurant/', '');
+    }
+
+    if (slug) {
         const restaurant = findRestaurantBySlug(slug);
-
         if (restaurant) {
-            // Show detail without updating hash (to avoid loop)
             showDetail(restaurant, false);
-        } else {
-            // Restaurant not found, go back to home
-            console.warn(`Restaurant not found for slug: ${slug}`);
+        } else if (allRestaurants.length > 0) {
             toggleHome(false);
         }
-    } else if (hash === '' || hash === '/') {
-        // Empty hash or root, show home
+    } else {
         if (!detailView.classList.contains('hidden')) {
             toggleHome(false);
         }
@@ -1022,9 +1046,6 @@ function handleHashChange() {
 
 // --- TAB MANAGEMENT ---
 
-/**
- * Sets up main tab switching
- */
 function setupMainTabs() {
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
@@ -1033,7 +1054,6 @@ function setupMainTabs() {
         btn.addEventListener('click', () => {
             const target = btn.getAttribute('data-tab');
 
-            // Show/hide location filter with animation
             if (target === 'ranking') {
                 setTimeout(() => {
                     locationFilterContainer.classList.add('show');
@@ -1043,25 +1063,28 @@ function setupMainTabs() {
                 locationFilterContainer.classList.remove('show');
             }
 
-            // Lazy-load Google Maps iframe on first click
             if (target === 'map' && !mapLoaded) {
                 const mapContainer = document.getElementById('map-container');
                 if (mapContainer) {
                     mapContainer.innerHTML = `
+                        <div class="map-loader" id="map-loader" style="text-align:center; padding:2rem; color:var(--text-muted);">Cargando mapa…</div>
                         <iframe
                             src="https://www.google.com/maps/d/embed?mid=1rViUskbYtl1mWekFkuBO6AQdzEsOI20&ehbc=2E312F&noprof=1"
-                            width="100%" height="450" style="border:0; border-radius: 16px;" loading="lazy" allowfullscreen
+                            width="100%" height="450" style="border:0; border-radius:16px;" loading="lazy" allowfullscreen
                             referrerpolicy="no-referrer-when-downgrade" title="Mapa de ubicación de restaurantes"></iframe>
                     `;
+                    const iframe = mapContainer.querySelector('iframe');
+                    const loader = mapContainer.querySelector('#map-loader');
+                    if (iframe && loader) {
+                        iframe.addEventListener('load', () => loader.remove(), { once: true });
+                    }
                     mapLoaded = true;
                 }
             }
 
-            // Update buttons
             tabBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            // Update content visibility
             tabContents.forEach(content => content.classList.add('hidden'));
             document.getElementById(`${target}-view`).classList.remove('hidden');
         });
@@ -1070,31 +1093,64 @@ function setupMainTabs() {
 
 // --- LIGHTBOX ---
 
-window.openLightbox = function (src) {
-    if (lightbox && lightboxImg) {
-        lightboxImg.src = src;
-        lightbox.classList.add('visible');
+function openLightbox(src) {
+    if (!lightbox || !lightboxImg) return;
+
+    const galleryImgs = Array.from(document.querySelectorAll('.gallery-img'));
+    lightboxPhotos = galleryImgs.map(img => img.dataset.full).filter(Boolean);
+    lightboxIndex = Math.max(0, lightboxPhotos.indexOf(src));
+    if (lightboxIndex < 0) {
+        lightboxPhotos = [src];
+        lightboxIndex = 0;
     }
-};
 
-window.closeLightbox = function () {
-    if (lightbox) {
-        lightbox.classList.remove('visible');
-        setTimeout(() => {
-            if (lightboxImg) lightboxImg.src = '';
-        }, 300);
+    lightboxImg.src = src;
+    lightboxImg.alt = (currentDetailRestaurantName || 'Foto del restaurante') + ' — foto';
+    lightbox.classList.add('visible');
+    lightboxPreviousFocus = document.activeElement;
+    if (lightboxClose) lightboxClose.focus();
+}
+window.openLightbox = openLightbox;
+
+function closeLightbox() {
+    if (!lightbox) return;
+    lightbox.classList.remove('visible');
+    setTimeout(() => {
+        if (lightboxImg) lightboxImg.src = '';
+    }, 300);
+    if (lightboxPreviousFocus && typeof lightboxPreviousFocus.focus === 'function') {
+        try { lightboxPreviousFocus.focus(); } catch (e) {}
     }
-};
+}
+window.closeLightbox = closeLightbox;
 
-// Removed duplicated initApp and DOMContentLoaded handler
+function showNextPhoto(delta) {
+    if (lightboxPhotos.length === 0) return;
+    lightboxIndex = (lightboxIndex + delta + lightboxPhotos.length) % lightboxPhotos.length;
+    lightboxImg.src = lightboxPhotos[lightboxIndex];
+}
 
-/**
- * Sets up lightbox event listeners
- */
 function setupLightbox() {
     if (lightbox) {
         lightbox.addEventListener('click', (e) => {
             if (e.target === lightbox) closeLightbox();
+        });
+        // Swipe support
+        lightbox.addEventListener('touchstart', (e) => {
+            if (e.touches && e.touches.length === 1) {
+                lightboxTouchStartX = e.touches[0].clientX;
+            }
+        }, { passive: true });
+        lightbox.addEventListener('touchend', (e) => {
+            if (lightboxTouchStartX === null) return;
+            const endX = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX : null;
+            if (endX !== null) {
+                const dx = endX - lightboxTouchStartX;
+                if (Math.abs(dx) > 50) {
+                    showNextPhoto(dx < 0 ? 1 : -1);
+                }
+            }
+            lightboxTouchStartX = null;
         });
     }
 
@@ -1102,37 +1158,55 @@ function setupLightbox() {
         lightboxClose.addEventListener('click', closeLightbox);
     }
 
-    // Close on Escape key
     document.addEventListener('keydown', (e) => {
+        if (!lightbox || !lightbox.classList.contains('visible')) return;
         if (e.key === 'Escape') closeLightbox();
+        else if (e.key === 'ArrowRight') showNextPhoto(1);
+        else if (e.key === 'ArrowLeft') showNextPhoto(-1);
+        else if (e.key === 'Tab') {
+            // Trap focus inside lightbox
+            e.preventDefault();
+            if (lightboxClose) lightboxClose.focus();
+        }
     });
 }
 
 // --- SETTINGS ---
 
-/**
- * Sets up settings menu and dark mode toggle
- */
 function setupSettings() {
     settingsBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         settingsMenu.classList.toggle('hidden');
+        const expanded = settingsBtn.getAttribute('aria-expanded') === 'true';
+        settingsBtn.setAttribute('aria-expanded', String(!expanded));
     });
 
-    document.addEventListener('click', () => settingsMenu.classList.add('hidden'));
+    document.addEventListener('click', () => {
+        settingsMenu.classList.add('hidden');
+        settingsBtn.setAttribute('aria-expanded', 'false');
+    });
     settingsMenu.addEventListener('click', (e) => e.stopPropagation());
 
-    darkModeToggle.addEventListener('change', () => {
-        document.body.classList.toggle('dark-mode');
-        document.body.classList.toggle('light-mode');
-    });
+    // Sync dark mode persisted state
+    const isDark = localStorage.getItem('darkMode') === 'true';
+    if (isDark) {
+        document.body.classList.remove('light-mode');
+        document.body.classList.add('dark-mode');
+        if (darkModeToggle) darkModeToggle.checked = true;
+    }
+
+    if (darkModeToggle) {
+        darkModeToggle.addEventListener('change', () => {
+            const checked = darkModeToggle.checked;
+            document.body.classList.toggle('dark-mode', checked);
+            document.body.classList.toggle('light-mode', !checked);
+            localStorage.setItem('darkMode', String(checked));
+        });
+    }
 }
 
 // --- INITIALIZATION ---
 
-/**
- * Caches all DOM elements
- */
 function cacheDOMElements() {
     rankingList = document.getElementById('ranking-list');
     homeView = document.getElementById('home');
@@ -1151,7 +1225,6 @@ function cacheDOMElements() {
     sortFilter = document.getElementById('sort-filter');
 }
 
-// Setup location filter listener (moved to init or separate setup, but keeping logic consistent)
 function setupFilters() {
     if (locationFilter) {
         locationFilter.addEventListener('change', (e) => {
@@ -1164,13 +1237,11 @@ function setupFilters() {
             currentSort = e.target.value;
             applySort();
             renderRanking();
+            syncFiltersToUrl();
         });
     }
 }
 
-/**
- * Sets up mode switcher
- */
 function setupModeSwitcher() {
     const modeBtns = document.querySelectorAll('.mode-btn');
 
@@ -1180,61 +1251,74 @@ function setupModeSwitcher() {
             if (newMode === currentMode) return;
 
             currentMode = newMode;
+            currentLocation = 'all';
 
-            // Update buttons
             modeBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            // Handle Tabs visibility based on mode
             const activeTabsForMode = CONFIG.tabsData[currentMode] || ['ranking'];
             const tabs = document.querySelectorAll('.tab-btn');
             tabs.forEach(tab => {
                 const tabId = tab.getAttribute('data-tab');
-                if (activeTabsForMode.includes(tabId)) {
-                    tab.style.display = 'flex';
-                } else {
-                    tab.style.display = 'none';
-                }
+                tab.style.display = activeTabsForMode.includes(tabId) ? 'flex' : 'none';
             });
 
-            // If current tab is hidden, switch to first available tab (usually 'ranking')
             const activeTab = document.querySelector('.tab-btn.active');
             if (activeTab && activeTab.style.display === 'none') {
-                // Trigger click on ranking tab
                 document.querySelector('.tab-btn[data-tab="ranking"]').click();
             }
 
-            // Filter existing data without re-fetching
             filterByMode();
+            syncFiltersToUrl();
         });
     });
 }
 
+function applyInitialFiltersUI() {
+    if (sortFilter) sortFilter.value = currentSort;
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-mode') === currentMode);
+    });
+    const activeTabsForMode = CONFIG.tabsData[currentMode] || ['ranking'];
+    document.querySelectorAll('.tab-btn').forEach(tab => {
+        const tabId = tab.getAttribute('data-tab');
+        tab.style.display = activeTabsForMode.includes(tabId) ? 'flex' : 'none';
+    });
+}
 
-/**
- * Main initialization function
- */
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').catch(() => {});
+        });
+    }
+}
+
 function initApp() {
     cacheDOMElements();
 
-    // Header animation
-    gsap.from('.header', { opacity: 0, y: 30, duration: 1, ease: "expo.out" });
+    // Capture original meta description for restoration later
+    const metaDesc = document.querySelector('meta[name="description"]');
+    originalDescription = metaDesc ? metaDesc.getAttribute('content') || '' : '';
 
-    // Setup all event listeners
+    if (window.gsap) {
+        gsap.from('.header', { opacity: 0, y: 30, duration: 1, ease: "expo.out" });
+    }
+
+    readFiltersFromUrl();
+    applyInitialFiltersUI();
+
     setupMainTabs();
     setupSettings();
     setupLightbox();
     setupModeSwitcher();
     setupFilters();
 
-    // Back button
     backBtn.addEventListener('click', () => toggleHome(true));
 
-    // Hash navigation listeners
-    window.addEventListener('hashchange', handleHashChange);
-    // Note: Don't call handleHashChange on load event, it's called after data loads
+    window.addEventListener('popstate', handleRouteChange);
+    window.addEventListener('hashchange', handleRouteChange);
 
-    // Show location filter on load if ranking tab is active
     setTimeout(() => {
         const activeTab = document.querySelector('.tab-btn.active');
         if (activeTab && activeTab.getAttribute('data-tab') === 'ranking') {
@@ -1243,12 +1327,14 @@ function initApp() {
         }
     }, 100);
 
-    // Fetch data
+    renderSkeleton();
     fetchData();
 
-    // Track page view (fire-and-forget)
     trackEvent('pageview');
+
+    registerServiceWorker();
 }
 
-// Single DOMContentLoaded listener
 document.addEventListener('DOMContentLoaded', initApp);
+
+})();

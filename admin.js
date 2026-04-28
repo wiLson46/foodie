@@ -2,17 +2,11 @@
  * Admin Panel JS — admin.js
  * Lógica para el panel de administración de Comer.ar
  *
- * Requiere: admin.html + Code.gs deployado como Web App
+ * Requiere: admin.html + Code.gs deployado como Web App + ADMIN_SECRET en Script Properties.
  */
 
-// =============================================
-// CONFIGURACIÓN
-// =============================================
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwxeoejxV6citQRUl4PinrsDpnp3TNQBA7wrCXbHw2a02MvUsARYZnOwBWdVxEWjR6P/exec';
+const SCRIPT_URL = (window.COMER_CONFIG && window.COMER_CONFIG.SCRIPT_URL) || '';
 
-// =============================================
-// ESTADO GLOBAL
-// =============================================
 let adminData = {
     restaurants: [],
     critics: [],
@@ -22,9 +16,6 @@ let adminData = {
 
 let generatedUrl = '';
 
-// =============================================
-// DOM CACHE
-// =============================================
 const statusText = document.getElementById('status-text');
 const adminLoader = document.getElementById('admin-loader');
 const adminContent = document.getElementById('admin-content');
@@ -33,36 +24,51 @@ const restaurantCount = document.getElementById('restaurant-count');
 const toastContainer = document.getElementById('toast-container');
 
 // =============================================
+// SECRET ADMIN
+// =============================================
+// Default temporal — cambiar tanto acá como en Script Properties (ADMIN_SECRET).
+const ADMIN_SECRET_DEFAULT = 'holasoywilson';
+
+function getAdminSecret() {
+    let s = sessionStorage.getItem('adminSecret');
+    if (!s) s = ADMIN_SECRET_DEFAULT;
+    return s ? s.trim() : '';
+}
+
+function clearAdminSecret() {
+    sessionStorage.removeItem('adminSecret');
+}
+
+// =============================================
 // INICIALIZACIÓN
 // =============================================
 document.addEventListener('DOMContentLoaded', initAdmin);
 
 async function initAdmin() {
-    if (!SCRIPT_URL || SCRIPT_URL.includes('AGREGA_AQUI')) {
-        statusText.textContent = '⚠ Falta configurar SCRIPT_URL en admin.js';
+    if (!SCRIPT_URL) {
+        statusText.textContent = '⚠ Falta configurar SCRIPT_URL en config.js';
         statusText.style.color = '#e74c3c';
-        adminLoader.innerHTML = '<p style="color: #e74c3c;">Configurá la URL del script en admin.js</p>';
+        adminLoader.innerHTML = '<p style="color: #e74c3c;">Configurá la URL del script en config.js</p>';
         return;
     }
 
     try {
-        console.log('[Admin] Cargando datos desde:', SCRIPT_URL + '?action=admin');
-        const res = await fetch(SCRIPT_URL + '?action=admin');
-        console.log('[Admin] Respuesta del servidor:', res.status, res.statusText);
-        const json = await res.json();
-        console.log('[Admin] JSON recibido, keys:', Object.keys(json));
+        // Carga en paralelo: datos admin + stats
+        const [adminRes, statsRes] = await Promise.allSettled([
+            fetch(SCRIPT_URL + '?action=admin').then(r => r.json()),
+            fetch(SCRIPT_URL + '?action=getStats').then(r => r.json())
+        ]);
 
+        if (adminRes.status !== 'fulfilled') throw adminRes.reason || new Error('Error cargando datos');
+        const json = adminRes.value;
         if (json.error) throw new Error(json.error);
 
         adminData = json;
 
-        // --- Ordenamiento Global ---
-        // 1. Críticos: Orden Alfabético
         if (adminData.critics) {
             adminData.critics.sort((a, b) => a.localeCompare(b));
         }
 
-        // 2. Restaurantes: Nombre (A-Z) y luego Fecha (Descendente)
         if (adminData.restaurants) {
             adminData.restaurants.sort((a, b) => {
                 const nameA = (a.name || '').toLowerCase();
@@ -70,41 +76,47 @@ async function initAdmin() {
                 if (nameA < nameB) return -1;
                 if (nameA > nameB) return 1;
 
-                // Si se llama igual, la fecha más nueva primero
                 const dateA = (a.fecha || '').split('/').reverse().join('');
                 const dateB = (b.fecha || '').split('/').reverse().join('');
                 return dateB.localeCompare(dateA);
             });
         }
 
-        console.log('Admin data loaded (sorted):', adminData);
-
         if (adminData.nextId) {
             const newIdInput = document.getElementById('new-id');
             if (newIdInput) newIdInput.value = adminData.nextId;
         }
 
-        // Render UI
         renderRestaurants();
         populateLinkSelectors();
         setupSmartPaste();
 
-        // Show content
         adminLoader.style.display = 'none';
         adminContent.style.display = 'block';
 
         statusText.textContent = `✅ ${adminData.restaurants.length} restaurantes cargados`;
         statusText.style.color = '#2ecc71';
 
-        // Re-initialize lucide icons for dynamic content
-        lucide.createIcons();
+        if (window.lucide) lucide.createIcons();
 
-        // Load stats in parallel (non-blocking)
-        loadStats();
+        // Procesar stats si vinieron OK
+        if (statsRes.status === 'fulfilled' && !statsRes.value.error) {
+            renderStats(statsRes.value);
+        } else {
+            const statsLoader = document.getElementById('stats-loader');
+            if (statsLoader) {
+                statsLoader.innerHTML = `
+                    <div class="stats-empty">
+                        <i data-lucide="bar-chart-3"></i>
+                        <p>No se pudieron cargar las estadísticas</p>
+                    </div>
+                `;
+                if (window.lucide) lucide.createIcons();
+            }
+        }
 
     } catch (error) {
-        console.error('[Admin] Error cargando datos del admin:', error);
-        console.error('[Admin] Stack:', error.stack);
+        console.error('[Admin] Error cargando datos:', error);
         statusText.textContent = `❌ Error: ${error.message}`;
         statusText.style.color = '#e74c3c';
         adminLoader.innerHTML = `
@@ -128,47 +140,45 @@ function toggleSection(name) {
     chevron.classList.toggle('open');
     header.classList.toggle('open');
 
-    // When opening the stats section, render or resize the chart
     if (name === 'stats' && body.classList.contains('open')) {
         setTimeout(() => {
             if (statsChart) {
                 statsChart.resize();
             } else if (statsData) {
-                // Chart wasn't rendered yet (section was collapsed during load)
                 renderPageViewsChart(currentStatsMode);
             }
         }, 150);
     }
 }
+window.toggleSection = toggleSection;
 
 // =============================================
 // RENDERIZAR RESTAURANTES
 // =============================================
 function renderRestaurants(filterText = '') {
-    const restaurantsList = document.getElementById('restaurants-list');
+    const list = document.getElementById('restaurants-list');
 
-    // Solo mostrar resultados si hay algo escrito en el buscador
     if (!filterText.trim()) {
-        restaurantsList.innerHTML = `
+        list.innerHTML = `
             <div class="empty-state" style="padding: 3rem 1.5rem; opacity: 0.5;">
                 <i data-lucide="search" style="width: 40px; height: 40px; margin-bottom: 1rem;"></i>
                 <p style="font-weight: 500;">Ingresá un nombre para gestionar restaurantes</p>
             </div>
         `;
         restaurantCount.textContent = '0';
-        lucide.createIcons();
+        if (window.lucide) lucide.createIcons();
         return;
     }
 
     if (!adminData.restaurants || adminData.restaurants.length === 0) {
-        restaurantsList.innerHTML = `
+        list.innerHTML = `
             <div class="empty-state">
                 <i data-lucide="inbox"></i>
                 <p>No hay restaurantes en la tabla</p>
             </div>
         `;
         restaurantCount.textContent = '0';
-        lucide.createIcons();
+        if (window.lucide) lucide.createIcons();
         return;
     }
 
@@ -182,24 +192,24 @@ function renderRestaurants(filterText = '') {
     restaurantCount.textContent = filtered.length;
 
     if (filtered.length === 0) {
-        restaurantsList.innerHTML = `
+        list.innerHTML = `
             <div class="empty-state">
                 <i data-lucide="search-x"></i>
                 <p>No se encontraron restaurantes</p>
             </div>
         `;
-        lucide.createIcons();
+        if (window.lucide) lucide.createIcons();
         return;
     }
 
     let html = '';
-    filtered.forEach((r, idx) => {
+    filtered.forEach((r) => {
         const globalIdx = adminData.restaurants.indexOf(r);
         html += createRestaurantCard(r, globalIdx);
     });
 
-    restaurantsList.innerHTML = html;
-    lucide.createIcons();
+    list.innerHTML = html;
+    if (window.lucide) lucide.createIcons();
 }
 
 function createRestaurantCard(r, globalIdx) {
@@ -210,45 +220,45 @@ function createRestaurantCard(r, globalIdx) {
     <div class="restaurant-block" id="block-${globalIdx}">
         <div class="restaurant-block-header">
             <div class="restaurant-block-name">
-                ${r.name || 'Sin nombre'}
+                ${escapeHtml(r.name || 'Sin nombre')}
             </div>
         </div>
 
         <div class="restaurant-fields-grid">
             <div class="admin-form-group">
-                <label class="admin-label"><i data-lucide="hash"></i> ID</label>
+                <label class="admin-label" for="edit-id-${globalIdx}"><i data-lucide="hash"></i> ID</label>
                 <input type="text" class="admin-input" id="edit-id-${globalIdx}" value="${escapeHtml(r.id || '')}" disabled style="background: rgba(0,0,0,0.05); font-weight: bold;">
             </div>
             <div class="admin-form-group">
-                <label class="admin-label"><i data-lucide="store"></i> Nombre</label>
+                <label class="admin-label" for="edit-name-${globalIdx}"><i data-lucide="store"></i> Nombre</label>
                 <input type="text" class="admin-input" id="edit-name-${globalIdx}" value="${escapeHtml(r.name || '')}">
             </div>
             <div class="admin-form-group">
-                <label class="admin-label"><i data-lucide="map-pin"></i> Ubicación</label>
+                <label class="admin-label" for="edit-location-${globalIdx}"><i data-lucide="map-pin"></i> Ubicación</label>
                 <input type="text" class="admin-input" id="edit-location-${globalIdx}" value="${escapeHtml(r.location || '')}">
             </div>
             <div class="admin-form-group field-full">
-                <label class="admin-label"><i data-lucide="file-text"></i> Descripción</label>
+                <label class="admin-label" for="edit-description-${globalIdx}"><i data-lucide="file-text"></i> Descripción</label>
                 <textarea class="admin-textarea" id="edit-description-${globalIdx}">${escapeHtml(r.description || '')}</textarea>
             </div>
             <div class="admin-form-group">
-                <label class="admin-label"><i data-lucide="calendar"></i> Fecha</label>
+                <label class="admin-label" for="edit-fecha-${globalIdx}"><i data-lucide="calendar"></i> Fecha</label>
                 <input type="text" class="admin-input" id="edit-fecha-${globalIdx}" value="${escapeHtml(r.fecha || '')}">
             </div>
             <div class="admin-form-group">
-                <label class="admin-label"><i data-lucide="navigation"></i> Dirección</label>
+                <label class="admin-label" for="edit-direccion-${globalIdx}"><i data-lucide="navigation"></i> Dirección</label>
                 <input type="text" class="admin-input" id="edit-direccion-${globalIdx}" value="${escapeHtml(r.direccion || '')}">
             </div>
             <div class="admin-form-group">
-                <label class="admin-label"><i data-lucide="phone"></i> Teléfono</label>
+                <label class="admin-label" for="edit-telefono-${globalIdx}"><i data-lucide="phone"></i> Teléfono</label>
                 <input type="text" class="admin-input" id="edit-telefono-${globalIdx}" value="${escapeHtml(r.telefono || '')}">
             </div>
             <div class="admin-form-group">
-                <label class="admin-label"><i data-lucide="camera"></i> Instagram</label>
+                <label class="admin-label" for="edit-instagram-${globalIdx}"><i data-lucide="camera"></i> Instagram</label>
                 <input type="text" class="admin-input" id="edit-instagram-${globalIdx}" value="${escapeHtml(r.instagram || '')}">
             </div>
             <div class="admin-form-group">
-                <label class="admin-label"><i data-lucide="map"></i> Link Mapa</label>
+                <label class="admin-label" for="edit-linkMapa-${globalIdx}"><i data-lucide="map"></i> Link Mapa</label>
                 <input type="url" class="admin-input" id="edit-linkMapa-${globalIdx}" value="${escapeHtml(r.linkMapa || '')}">
             </div>
             <div class="admin-form-group">
@@ -265,7 +275,7 @@ function createRestaurantCard(r, globalIdx) {
                 </div>
             </div>
             <div class="admin-form-group">
-                <label class="admin-label"><i data-lucide="shopping-bag"></i> Pedido por</label>
+                <label class="admin-label" for="edit-pedidoPor-${globalIdx}"><i data-lucide="shopping-bag"></i> Pedido por</label>
                 <input type="text" class="admin-input" id="edit-pedidoPor-${globalIdx}" value="${escapeHtml(r.pedidoPor || '')}">
             </div>
         </div>
@@ -278,23 +288,20 @@ function createRestaurantCard(r, globalIdx) {
     `;
 }
 
-// =============================================
-// FILTRAR RESTAURANTES (Search bar)
-// =============================================
 function filterRestaurants() {
     const query = document.getElementById('search-restaurants').value;
     renderRestaurants(query);
 }
+window.filterRestaurants = filterRestaurants;
 
 // =============================================
-// GUARDAR RESTAURANTE (Actualizar fila)
+// GUARDAR RESTAURANTE
 // =============================================
 async function saveRestaurant(idx) {
     const r = adminData.restaurants[idx];
     if (!r) return;
 
     const btn = document.getElementById(`btn-save-${idx}`);
-    setButtonLoading(btn, true);
 
     const modalidadEl = document.querySelector(`input[name="edit-modalidad-${idx}"]:checked`);
 
@@ -314,55 +321,56 @@ async function saveRestaurant(idx) {
 
     if (!data.name) {
         showToast('El nombre del restaurante es obligatorio', 'error');
-        setButtonLoading(btn, false);
         return;
     }
 
+    if (!confirm(`¿Guardar cambios en "${data.name}"?`)) {
+        return;
+    }
+
+    setButtonLoading(btn, true);
+
     try {
-        console.log('[Admin] Guardando restaurante idx:', idx, 'data:', data);
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
                 action: 'updateRestaurant',
                 rowIndex: r.rowIndex,
-                data: data
+                data: data,
+                adminSecret: getAdminSecret()
             })
         });
 
-        console.log('[Admin] Respuesta guardar:', res.status, res.statusText);
         const result = await res.json();
-        console.log('[Admin] Resultado guardar:', result);
 
         if (result.success) {
-            // Actualizar datos locales
             Object.assign(adminData.restaurants[idx], data);
             showToast(`✅ "${data.name}" guardado con éxito`, 'success');
 
-            // Breve flash visual en el bloque
             const block = document.getElementById(`block-${idx}`);
             if (block) {
                 block.style.borderColor = '#2ecc71';
-                setTimeout(() => { block.style.borderColor = ''; }, 1500);
+                setTimeout(() => { block.style.borderColor = ''; }, 2800);
             }
         } else {
+            if (/no autorizado/i.test(result.message || '')) clearAdminSecret();
             showToast(`❌ Error: ${result.message}`, 'error');
         }
 
     } catch (error) {
         console.error('[Admin] Error guardando restaurante:', error);
-        console.error('[Admin] Stack:', error.stack);
         showToast(`❌ Error de conexión: ${error.message}`, 'error');
     } finally {
         setButtonLoading(btn, false);
     }
 }
+window.saveRestaurant = saveRestaurant;
 
 // =============================================
 // CREAR RESTAURANTE
 // =============================================
 async function createRestaurant() {
     const btn = document.getElementById('btn-create-restaurant');
-    setButtonLoading(btn, true);
 
     const modalidadEl = document.querySelector('input[name="new-modalidad"]:checked');
 
@@ -381,28 +389,30 @@ async function createRestaurant() {
 
     if (!data.name) {
         showToast('El nombre del restaurante es obligatorio', 'error');
-        setButtonLoading(btn, false);
         return;
     }
 
+    if (!confirm(`¿Crear nuevo restaurante "${data.name}"?`)) {
+        return;
+    }
+
+    setButtonLoading(btn, true);
+
     try {
-        console.log('[Admin] Creando restaurante:', data);
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
                 action: 'addRestaurant',
-                data: data
+                data: data,
+                adminSecret: getAdminSecret()
             })
         });
 
-        console.log('[Admin] Respuesta crear:', res.status, res.statusText);
         const result = await res.json();
-        console.log('[Admin] Resultado crear:', result);
 
         if (result.success) {
             showToast(`✅ "${data.name}" creado exitosamente`, 'success');
 
-            // Agregar al estado local y re-renderizar
             data.rowIndex = result.rowIndex;
             if (result.idGenerado) {
                 data.id = result.idGenerado;
@@ -412,7 +422,6 @@ async function createRestaurant() {
             renderRestaurants();
             populateLinkSelectors();
 
-            // Limpiar formulario y actualizar el nuevo ID visible
             clearNewForm();
 
             const newIdInput = document.getElementById('new-id');
@@ -421,17 +430,18 @@ async function createRestaurant() {
             }
 
         } else {
+            if (/no autorizado/i.test(result.message || '')) clearAdminSecret();
             showToast(`❌ Error: ${result.message}`, 'error');
         }
 
     } catch (error) {
         console.error('[Admin] Error creando restaurante:', error);
-        console.error('[Admin] Stack:', error.stack);
         showToast(`❌ Error de conexión: ${error.message}`, 'error');
     } finally {
         setButtonLoading(btn, false);
     }
 }
+window.createRestaurant = createRestaurant;
 
 function clearNewForm() {
     const fields = ['name', 'location', 'description', 'fecha', 'direccion', 'telefono', 'instagram', 'linkMapa', 'pedidoPor'];
@@ -445,12 +455,9 @@ function clearNewForm() {
 // =============================================
 // GENERADOR DE LINKS
 // =============================================
-
-// One-time listener setup (called once at init)
 let linkSelectorsInitialized = false;
 
 function populateLinkSelectors() {
-    // Críticos (Ya vienen ordenados globalmente)
     const criticoSelect = document.getElementById('link-critico');
     criticoSelect.innerHTML = '<option value="" disabled selected>Seleccioná un crítico</option>';
     (adminData.critics || []).forEach(c => {
@@ -460,7 +467,6 @@ function populateLinkSelectors() {
         criticoSelect.appendChild(opt);
     });
 
-    // Restaurantes (Únicos y ordenados)
     const restoSelect = document.getElementById('link-restaurante');
     const fechaSelect = document.getElementById('link-fecha');
 
@@ -468,7 +474,6 @@ function populateLinkSelectors() {
     fechaSelect.innerHTML = '<option value="" disabled selected>Elige fecha</option>';
     fechaSelect.disabled = true;
 
-    // Obtener nombres únicos manteniendo el orden actual (que ya es alfabético)
     const uniqueNames = [];
     (adminData.restaurants || []).forEach(r => {
         if (!uniqueNames.includes(r.name)) {
@@ -483,7 +488,6 @@ function populateLinkSelectors() {
         restoSelect.appendChild(opt);
     });
 
-    // Listener para poblar fechas al elegir restaurante (ya vienen ordenadas descendente)
     if (!linkSelectorsInitialized) {
         restoSelect.addEventListener('change', () => {
             const selectedName = restoSelect.value;
@@ -499,7 +503,6 @@ function populateLinkSelectors() {
                     fechaSelect.appendChild(opt);
                 });
                 fechaSelect.disabled = false;
-                // Auto-seleccionar la primera fecha si solo hay una
                 if (matches.length === 1) {
                     fechaSelect.selectedIndex = 1;
                 }
@@ -525,23 +528,20 @@ async function generateLink() {
     setButtonLoading(btn, true);
 
     try {
-        console.log('[Admin] Generando link para:', { critico, restaurante, fecha });
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
                 action: 'generateToken',
                 critico: critico,
                 fecha: fecha,
-                restaurante: restaurante
+                restaurante: restaurante,
+                adminSecret: getAdminSecret()
             })
         });
 
-        console.log('[Admin] Respuesta generar link:', res.status, res.statusText);
         const result = await res.json();
-        console.log('[Admin] Resultado generar link:', result);
 
         if (result.success) {
-            // Construir URL relativa a carga.html usando el host actual
             const currentUrl = new URL(window.location.href);
             const pathParts = currentUrl.pathname.split('/');
             pathParts[pathParts.length - 1] = 'carga.html';
@@ -550,7 +550,6 @@ async function generateLink() {
 
             generatedUrl = currentUrl.toString();
 
-            // Show result
             const resultDiv = document.getElementById('link-result');
             const urlDiv = document.getElementById('link-result-url');
             urlDiv.textContent = generatedUrl;
@@ -558,22 +557,22 @@ async function generateLink() {
 
             showToast(`✅ ${result.message}`, 'success');
 
-            // Auto-copy to clipboard
             await copyToClipboard(generatedUrl);
 
-            lucide.createIcons();
+            if (window.lucide) lucide.createIcons();
         } else {
+            if (/no autorizado/i.test(result.message || '')) clearAdminSecret();
             showToast(`❌ Error: ${result.message}`, 'error');
         }
 
     } catch (error) {
         console.error('[Admin] Error generando link:', error);
-        console.error('[Admin] Stack:', error.stack);
         showToast(`❌ Error de conexión: ${error.message}`, 'error');
     } finally {
         setButtonLoading(btn, false);
     }
 }
+window.generateLink = generateLink;
 
 async function copyLink() {
     if (!generatedUrl) {
@@ -582,13 +581,13 @@ async function copyLink() {
     }
     await copyToClipboard(generatedUrl);
 }
+window.copyLink = copyLink;
 
 async function copyToClipboard(text) {
     try {
         await navigator.clipboard.writeText(text);
         showToast('📋 Link copiado al portapapeles', 'info');
     } catch (err) {
-        // Fallback for older browsers
         const textarea = document.createElement('textarea');
         textarea.value = text;
         textarea.style.position = 'fixed';
@@ -611,18 +610,14 @@ function showToast(message, type = 'success') {
 
     toastContainer.appendChild(toast);
 
-    // Auto-remove after 3 seconds
     setTimeout(() => {
         toast.classList.add('removing');
         setTimeout(() => {
             if (toast.parentNode) toast.parentNode.removeChild(toast);
         }, 300);
-    }, 3000);
+    }, 3500);
 }
 
-// =============================================
-// UTILIDADES UI
-// =============================================
 function setButtonLoading(btn, loading) {
     if (!btn) return;
     if (loading) {
@@ -651,58 +646,63 @@ function setupSmartPaste() {
     const pasteArea = document.getElementById('smart-paste');
     if (!pasteArea) return;
 
-    // Saneamiento de seguridad estricto (Previene vulnerabilidades XSS por inyección)
     const sanitizePasteValue = (val) => {
         if (typeof val !== 'string') return String(val || '');
-        // Eliminar posibles etiquetas HTML, scripts, iframes...
         return val.replace(/<[^>]*>?/gm, '').trim();
+    };
+
+    const looksLikeJson = (s) => {
+        const t = s.trim();
+        return (t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'));
     };
 
     pasteArea.addEventListener('input', (e) => {
         const val = e.target.value.trim();
-        if (!val || val.length < 10) return; // Validación básica de tamaño antes de intentar parsear
+        if (!val || val.length < 10) return;
 
+        let data;
         try {
-            const data = JSON.parse(val);
-
-            // Mapeo seguro de claves del origen Gemini a los Inputs de admin.html
-            const mapping = {
-                name: 'new-name',
-                location: 'new-location',
-                description: 'new-description',
-                fecha: 'new-fecha',
-                direccion: 'new-direccion',
-                telefono: 'new-telefono',
-                instagram: 'new-instagram',
-                linkMapa: 'new-linkMapa',
-                pedidoPor: 'new-pedidoPor'
-            };
-
-            for (const key in mapping) {
-                if (data[key] !== undefined && data[key] !== null) {
-                    const input = document.getElementById(mapping[key]);
-                    if (input) {
-                        input.value = sanitizePasteValue(data[key]);
-                    }
-                }
+            data = JSON.parse(val);
+        } catch (err) {
+            // Solo mostrar error si claramente parece JSON pero está mal
+            if (looksLikeJson(val)) {
+                showToast(`❌ JSON inválido: ${err.message}`, 'error');
             }
-
-            // Tratamiento especial radio button
-            if (data.modalidad) {
-                const modInput = sanitizePasteValue(String(data.modalidad)).toUpperCase();
-                if (modInput === 'D' || modInput.includes('DELIVERY')) {
-                    document.getElementById('new-modal-d').checked = true;
-                } else if (modInput === 'P' || modInput.includes('PRESENCIAL')) {
-                    document.getElementById('new-modal-p').checked = true;
-                }
-            }
-
-            pasteArea.value = ''; // Limpiar el pegado exitoso
-            showToast('✅ Campos completados exitosamente', 'success');
-
-        } catch (error) {
-            // Falla de parseo silenciada (el usuario aún está pegando/escribiendo o pego mal)
+            return;
         }
+
+        const mapping = {
+            name: 'new-name',
+            location: 'new-location',
+            description: 'new-description',
+            fecha: 'new-fecha',
+            direccion: 'new-direccion',
+            telefono: 'new-telefono',
+            instagram: 'new-instagram',
+            linkMapa: 'new-linkMapa',
+            pedidoPor: 'new-pedidoPor'
+        };
+
+        for (const key in mapping) {
+            if (data[key] !== undefined && data[key] !== null) {
+                const input = document.getElementById(mapping[key]);
+                if (input) {
+                    input.value = sanitizePasteValue(data[key]);
+                }
+            }
+        }
+
+        if (data.modalidad) {
+            const modInput = sanitizePasteValue(String(data.modalidad)).toUpperCase();
+            if (modInput === 'D' || modInput.includes('DELIVERY')) {
+                document.getElementById('new-modal-d').checked = true;
+            } else if (modInput === 'P' || modInput.includes('PRESENCIAL')) {
+                document.getElementById('new-modal-p').checked = true;
+            }
+        }
+
+        pasteArea.value = '';
+        showToast('✅ Campos completados exitosamente', 'success');
     });
 }
 
@@ -713,62 +713,33 @@ let statsChart = null;
 let statsData = null;
 let currentStatsMode = 'daily';
 
-async function loadStats() {
+function renderStats(json) {
     const statsLoader = document.getElementById('stats-loader');
     const statsContent = document.getElementById('stats-content');
 
-    try {
-        console.log('[Stats] Cargando estadísticas desde:', SCRIPT_URL + '?action=getStats');
-        const res = await fetch(SCRIPT_URL + '?action=getStats');
-        console.log('[Stats] Respuesta del servidor:', res.status, res.statusText);
-        const json = await res.json();
-        console.log('[Stats] JSON recibido:', JSON.stringify(json).substring(0, 500));
+    statsData = json;
 
-        if (json.error) throw new Error(json.error);
+    const totalViews = (statsData.dailyViews || []).reduce((sum, d) => sum + d.count, 0);
+    const totalEl = document.getElementById('stats-total-count');
+    if (totalEl) totalEl.textContent = totalViews.toLocaleString('es-AR');
 
-        statsData = json;
-        console.log('Stats loaded:', statsData);
-
-        // Calculate total
-        const totalViews = (statsData.dailyViews || []).reduce((sum, d) => sum + d.count, 0);
-        document.getElementById('stats-total-count').textContent = totalViews.toLocaleString('es-AR');
-
-        // Render chart only if section is open, otherwise defer
-        const statsBody = document.getElementById('body-stats');
-        if (statsBody && statsBody.classList.contains('open')) {
-            renderPageViewsChart('daily');
-        }
-        // If section is closed, chart will be rendered when section opens (see toggleSection)
-
-        renderRestaurantTop(statsData.restaurantViews || []);
-
-        // Show content
-        if (statsLoader) statsLoader.style.display = 'none';
-        if (statsContent) statsContent.style.display = 'block';
-
-        lucide.createIcons();
-
-    } catch (error) {
-        console.error('[Stats] Error cargando estadísticas:', error);
-        console.error('[Stats] Stack:', error.stack);
-        if (statsLoader) {
-            statsLoader.innerHTML = `
-                <div class="stats-empty">
-                    <i data-lucide="bar-chart-3"></i>
-                    <p>No se pudieron cargar las estadísticas</p>
-                    <p style="font-size: 0.8rem; margin-top: 0.5rem; opacity: 0.6;">${error.message}</p>
-                </div>
-            `;
-            lucide.createIcons();
-        }
+    const statsBody = document.getElementById('body-stats');
+    if (statsBody && statsBody.classList.contains('open')) {
+        renderPageViewsChart('daily');
     }
+
+    renderRestaurantTop(statsData.restaurantViews || []);
+
+    if (statsLoader) statsLoader.style.display = 'none';
+    if (statsContent) statsContent.style.display = 'block';
+
+    if (window.lucide) lucide.createIcons();
 }
 
 function renderPageViewsChart(mode) {
     const ctx = document.getElementById('stats-chart');
     if (!ctx || !statsData) return;
 
-    // Destroy previous chart
     if (statsChart) {
         statsChart.destroy();
         statsChart = null;
@@ -802,11 +773,10 @@ function renderPageViewsChart(mode) {
                 <p>Aún no hay datos de visitas</p>
             </div>
         `;
-        lucide.createIcons();
+        if (window.lucide) lucide.createIcons();
         return;
     }
 
-    // Detect dark mode for chart colors
     const isDark = document.body.classList.contains('dark-mode');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
     const textColor = isDark ? '#AAAAAA' : '#555555';
@@ -821,7 +791,7 @@ function renderPageViewsChart(mode) {
                 label: 'Visitas',
                 data: data,
                 borderColor: goldColor,
-                backgroundColor: mode === 'monthly' ? goldBg : goldBg,
+                backgroundColor: goldBg,
                 borderWidth: mode === 'monthly' ? 0 : 2.5,
                 fill: true,
                 tension: 0.4,
@@ -836,14 +806,9 @@ function renderPageViewsChart(mode) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: {
-                intersect: false,
-                mode: 'index',
-            },
+            interaction: { intersect: false, mode: 'index' },
             plugins: {
-                legend: {
-                    display: false
-                },
+                legend: { display: false },
                 tooltip: {
                     backgroundColor: isDark ? '#333' : '#fff',
                     titleColor: isDark ? '#eee' : '#111',
@@ -896,7 +861,7 @@ function renderRestaurantTop(restaurantViews) {
                 <p>Aún no hay datos de restaurantes visitados</p>
             </div>
         `;
-        lucide.createIcons();
+        if (window.lucide) lucide.createIcons();
         return;
     }
 
@@ -936,11 +901,10 @@ function renderRestaurantTop(restaurantViews) {
 function switchStatsMode(mode) {
     currentStatsMode = mode;
 
-    // Update toggle buttons
     document.querySelectorAll('.stats-toggle-btn').forEach(btn => {
         btn.classList.toggle('active', btn.getAttribute('data-stats-mode') === mode);
     });
 
-    // Re-render chart
     renderPageViewsChart(mode);
 }
+window.switchStatsMode = switchStatsMode;

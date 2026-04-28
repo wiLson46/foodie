@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /carga.html
+
+Sitemap: https://comer.ar/sitemap.xml

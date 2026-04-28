@@ -6,11 +6,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Comer.ar</title>
     <meta name="description" content="Ranking de lugares para comer, por amigos que les gusta comer">
+    <meta name="theme-color" content="#FF9100">
+    <link rel="canonical" href="https://comer.ar/">
 
-    <!-- Fonts -->
+    <!-- Open Graph / Twitter -->
+    <meta property="og:title" content="Comer.ar">
+    <meta property="og:description" content="Ranking de lugares para comer, por amigos que les gusta comer">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://comer.ar/">
+    <meta property="og:image" content="https://comer.ar/fotos/imagenes/logoB.png">
+    <meta property="og:locale" content="es_AR">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Comer.ar">
+    <meta name="twitter:description" content="Ranking de lugares para comer, por amigos que les gusta comer">
+    <meta name="twitter:image" content="https://comer.ar/fotos/imagenes/logoB.png">
+
+    <!-- PWA -->
+    <link rel="manifest" href="./manifest.json">
+    <link rel="apple-touch-icon" href="./fotos/imagenes/logoB.png">
+
+    <!-- Fonts: preconnect + preload -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preload" as="style"
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap">
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap"
         rel="stylesheet">
@@ -97,8 +117,7 @@
 
             <section id="ranking-view" class="tab-content" role="tabpanel" aria-labelledby="ranking-tab">
                 <div id="ranking-list" class="ranking-list">
-                    <!-- Data will be injected here -->
-                    <div class="loader">Cargando la selección...</div>
+                    <!-- Skeleton/data injected here -->
                 </div>
             </section>
 
@@ -131,17 +150,15 @@
     <!-- Lightbox -->
     <div id="lightbox" role="dialog" aria-modal="true" aria-label="Visor de imágenes">
         <button id="lightbox-close" aria-label="Cerrar visor de imágenes">&times;</button>
-        <img id="lightbox-img" src="" alt="Imagen ampliada">
+        <img id="lightbox-img" src="" alt="">
     </div>
 
 
 
 
     <!-- JavaScript -->
+    <script src="config.js"></script>
     <script src="main.js"></script>
-    <script>
-        lucide.createIcons();
-    </script>
 </body>
 
 </html>
