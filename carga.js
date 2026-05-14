@@ -113,32 +113,76 @@ async function init() {
 function autoSelectFromToken(info) {
     if (!info) return;
 
+    // 1. Critic
     for (let i = 0; i < criticSelect.options.length; i++) {
-        if (criticSelect.options[i].text === info.critico) {
+        if (criticSelect.options[i].text.trim() === (info.critico || '').trim()) {
             criticSelect.selectedIndex = i;
             break;
         }
     }
     criticSelect.disabled = true;
 
+    // 2. Date — con fallback si el formato no matchea exactamente
+    let dateFound = false;
+    const normalFecha = (info.fecha || '').trim();
     for (let i = 0; i < dateSelect.options.length; i++) {
-        if (dateSelect.options[i].text === info.fecha) {
+        if (dateSelect.options[i].text.trim() === normalFecha) {
             dateSelect.selectedIndex = i;
+            dateFound = true;
             break;
         }
     }
-    dateSelect.disabled = true;
 
+    if (!dateFound && normalFecha) {
+        const opt = document.createElement('option');
+        opt.value = normalFecha;
+        opt.textContent = normalFecha;
+        dateSelect.appendChild(opt);
+        dateSelect.value = normalFecha;
+
+        // Registrar el restaurante del token en appData para que el change handler lo encuentre
+        if (info.rowIndex && info.restaurante) {
+            if (!appData.restaurantsByDate[normalFecha]) {
+                appData.restaurantsByDate[normalFecha] = [];
+            }
+            const already = appData.restaurantsByDate[normalFecha].some(
+                r => r.name.trim() === info.restaurante.trim()
+            );
+            if (!already) {
+                appData.restaurantsByDate[normalFecha].push({
+                    name: info.restaurante.trim(),
+                    type: info.type || '',
+                    rowIndex: info.rowIndex
+                });
+            }
+        }
+    }
+
+    dateSelect.disabled = true;
     dateSelect.dispatchEvent(new Event('change'));
 
+    // 3. Restaurant — con fallback si no matchea
+    const normalRest = (info.restaurante || '').trim();
+    let restFound = false;
     for (let i = 0; i < restSelect.options.length; i++) {
-        if (restSelect.options[i].text === info.restaurante) {
+        if (restSelect.options[i].text.trim() === normalRest) {
             restSelect.selectedIndex = i;
+            restFound = true;
             break;
         }
     }
-    restSelect.disabled = true;
 
+    if (!restFound && info.rowIndex && normalRest) {
+        const opt = document.createElement('option');
+        opt.value = String(info.rowIndex);
+        opt.textContent = normalRest;
+        opt.dataset.type = info.type || '';
+        opt.dataset.name = normalRest;
+        restSelect.appendChild(opt);
+        restSelect.value = String(info.rowIndex);
+    }
+
+    restSelect.disabled = true;
     restSelect.dispatchEvent(new Event('change'));
 }
 

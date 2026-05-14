@@ -345,6 +345,25 @@ function getPublicData(token) {
             fecha: String(linksDisplayData[idx][2]),
             restaurante: String(linksDisplayData[idx][3])
           };
+
+          // Buscar rowIndex del restaurante en mainTable para el fallback del frontend
+          var tokenRestNorm = resultData.tokenInfo.restaurante.trim().toLowerCase();
+          for (var ri = 1; ri < data.length; ri++) {
+            var rName = nameCol >= 0 ? String(data[ri][nameCol]).trim().toLowerCase() : '';
+            if (rName === tokenRestNorm) {
+              resultData.tokenInfo.rowIndex = ri + 1;
+              resultData.tokenInfo.type = typeCol >= 0 ? String(data[ri][typeCol]).trim() : '';
+              break;
+            }
+          }
+
+          // Buscar colIndex del crítico en la lista ya armada
+          for (var ci = 0; ci < resultData.critics.length; ci++) {
+            if (resultData.critics[ci].name === resultData.tokenInfo.critico) {
+              resultData.tokenInfo.colIndex = resultData.critics[ci].colIndex;
+              break;
+            }
+          }
         }
       }
     }
