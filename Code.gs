@@ -104,7 +104,10 @@ function doPost(e) {
  * Si no está configurado, se usa el fallback hardcodeado.
  */
 function requireAdminSecret(postData) {
-  var expected = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET') || 'ZeldaIgrisWilson2026';
+  var expected = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET');
+  if (!expected) {
+    throw new Error('Servidor mal configurado: ADMIN_SECRET no seteado.');
+  }
   if (!postData || postData.adminSecret !== expected) {
     throw new Error('No autorizado.');
   }

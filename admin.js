@@ -26,12 +26,13 @@ const toastContainer = document.getElementById('toast-container');
 // =============================================
 // SECRET ADMIN
 // =============================================
-// Default temporal — cambiar tanto acá como en Script Properties (ADMIN_SECRET).
-const ADMIN_SECRET_DEFAULT = 'holasoywilson';
-
 function getAdminSecret() {
     let s = sessionStorage.getItem('adminSecret');
-    if (!s) s = ADMIN_SECRET_DEFAULT;
+    if (!s) {
+        s = window.prompt('Admin secret:') || '';
+        s = s.trim();
+        if (s) sessionStorage.setItem('adminSecret', s);
+    }
     return s ? s.trim() : '';
 }
 
@@ -389,10 +390,6 @@ async function createRestaurant() {
 
     if (!data.name) {
         showToast('El nombre del restaurante es obligatorio', 'error');
-        return;
-    }
-
-    if (!confirm(`¿Crear nuevo restaurante "${data.name}"?`)) {
         return;
     }
 
