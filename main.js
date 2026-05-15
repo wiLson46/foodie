@@ -640,7 +640,7 @@ function generateScoresTableHTML(res) {
 
     const criticNames = Object.keys(res.critics);
     let rowsHtml = '';
-    const isDelivery = currentMode === 'delivery';
+    const isDelivery = res.presencialDelivery === 'D' || res.presencialDelivery === 'L';
 
     criticNames.forEach(critic => {
         const criticRes = res.critics[critic];
@@ -872,12 +872,12 @@ function showDetail(res, updateUrl = true) {
                 </div>`
         }
 
-            ${(mapLink && currentMode === 'presencial') ?
+            ${(mapLink && res.presencialDelivery === 'P') ?
             `<a href="${safeMapLink}" target="_blank" rel="noopener" class="info-item active link">
                     <i data-lucide="map" aria-hidden="true"></i>
                     <span>Ir al local</span>
                 </a>` :
-            (currentMode === 'presencial' ? `<div class="info-item inactive">
+            (res.presencialDelivery === 'P' ? `<div class="info-item inactive">
                     <i data-lucide="map" aria-hidden="true"></i>
                     <span>Ir al local</span>
                 </div>` : '')
