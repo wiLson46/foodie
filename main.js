@@ -469,7 +469,7 @@ function renderRanking() {
                     <h3 class="restaurant-name">${safeName}</h3>
                     ${visitDate ? `
                     <div class="ranking-date-box">
-                        <div class="date-label">VISITADO EL</div>
+                        <div class="date-label">${currentMode === 'alfajores' ? 'PROBADO EL' : 'VISITADO EL'}</div>
                         <div class="date-value">${safeDate}</div>
                     </div>` : ''}
                 </div>
@@ -1002,7 +1002,7 @@ function showDetail(res, updateUrl = true) {
                 <div class="detail-rank ${medalClass}">${rank > 0 ? rank : '-'}</div>
                 <h1 class="detail-title">${safeName}</h1>
                 ${visitDate ? `<div class="detail-date-box">
-                    <div class="date-label">VISITADO EL</div>
+                    <div class="date-label">${isAlf ? 'PROBADO EL' : 'VISITADO EL'}</div>
                     <div class="date-value">${safeDate}</div>
                 </div>` : ''}
 
