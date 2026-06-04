@@ -18,6 +18,26 @@ var SHEET_NAME = 'mainTable';
 var LINKS_SHEET_NAME = 'links';
 var STATS_SHEET_NAME = 'stats';
 
+// Pestaña de alfajores (mismo spreadsheet, otra hoja). La targeteamos por gid
+// para no depender del nombre exacto de la pestaña.
+var ALFAJORES_SHEET_GID = 317984049;
+
+/**
+ * Devuelve la hoja de alfajores buscándola por su gid (getSheetId()).
+ * Retorna null si no se encuentra.
+ */
+function getAlfajoresSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].getSheetId() === ALFAJORES_SHEET_GID) return sheets[i];
+  }
+  return null;
+}
+
+// Las 5 dimensiones que puntúa un alfajor (orden = columnas de datos antes de RATING).
+var ALFAJOR_SCORE_KEYS = ['relleno', 'tapas', 'armonia', 'presentacion', 'precio'];
+
 var PUBLIC_CACHE_KEY = 'publicData_v1';
 var PUBLIC_CACHE_TTL = 300; // 5 min
 
@@ -71,6 +91,12 @@ function doPost(e) {
       case 'addRestaurant':
         requireAdminSecret(postData);
         return sendJson(addRestaurant(postData));
+      case 'addAlfajor':
+        requireAdminSecret(postData);
+        return sendJson(addAlfajor(postData));
+      case 'updateAlfajor':
+        requireAdminSecret(postData);
+        return sendJson(updateAlfajor(postData));
       case 'generateToken':
         requireAdminSecret(postData);
         return sendJson(generateToken(postData));
@@ -183,6 +209,28 @@ function validateScores(vals) {
 }
 
 /**
+ * Valida los 5 puntajes (0-10) de un alfajor.
+ */
+function validateScoresAlfajor(vals) {
+  if (!vals) throw new Error('Faltan puntajes.');
+  ALFAJOR_SCORE_KEYS.forEach(function (k) {
+    var n = parseFloat(vals[k]);
+    if (isNaN(n) || n < 0 || n > 10) throw new Error('Puntaje inválido: ' + k);
+  });
+}
+
+/**
+ * Valida los datos básicos de un alfajor.
+ */
+function validateAlfajor(data) {
+  if (!data) throw new Error('Datos vacíos');
+  if (!data.name || String(data.name).trim().length === 0) throw new Error('El nombre es obligatorio.');
+  if (String(data.name).length > 200) throw new Error('Nombre demasiado largo.');
+  if (data.description && String(data.description).length > 1000) throw new Error('Descripción demasiado larga.');
+  if (data.web && String(data.web).length > 2000) throw new Error('Web demasiado larga.');
+}
+
+/**
  * SHA-256 hex de un string. Para tokens.
  */
 function hashToken_(token) {
@@ -254,6 +302,13 @@ function getPublicData(token) {
     if (cached) {
       try { return JSON.parse(cached); } catch (e) {}
     }
+  }
+
+  // Si el token corresponde a un alfajor, devolvemos su payload y salimos
+  // (el flujo de restaurantes queda intacto para tokens de restaurante / legacy).
+  if (token) {
+    var alfajorPayload = getAlfajorTokenData_(token);
+    if (alfajorPayload) return alfajorPayload;
   }
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -372,6 +427,79 @@ function getPublicData(token) {
   return resultData;
 }
 
+/**
+ * Si el token es de tipo 'alfajor', arma el payload de carga para alfajores:
+ *   { critics:[], dates:[], restaurantsByDate:{}, tokenInfo:{ type, critico, alfajor, rowIndex, colIndex } }
+ * Retorna null si el token NO es de alfajor (restaurante o legacy) => sigue el flujo normal.
+ * Retorna el payload SIN tokenInfo si el token ya fue usado (carga muestra "inválido").
+ */
+function getAlfajorTokenData_(token) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var linksSheet = ss.getSheetByName(LINKS_SHEET_NAME);
+  if (!linksSheet) return null;
+
+  var linksRange = linksSheet.getDataRange();
+  var linksData = linksRange.getValues();
+  var found = findTokenRow_(linksData, token);
+  if (!found) return null;
+
+  var tipo = String(found.row[6] || '').toLowerCase().trim();
+  if (tipo !== 'alfajor') return null; // restaurante o legacy => flujo normal
+
+  // carga.js espera estos arrays aunque no los use en modo alfajor
+  var base = { critics: [], dates: [], restaurantsByDate: {} };
+
+  if (String(found.row[4]) === 'usado') return base; // sin tokenInfo => "ya usado"
+
+  var critico = String(found.row[1]).trim();
+  var alfajorName = String(linksRange.getDisplayValues()[found.rowIndex - 1][3]).trim();
+
+  var sheet = getAlfajoresSheet_();
+  if (!sheet) return base;
+
+  var data = sheet.getDataRange().getValues();
+  if (data.length === 0) return base;
+  var headers = data[0];
+
+  var nameCol = -1;
+  for (var i = 0; i < headers.length; i++) {
+    var h = String(headers[i]).toLowerCase().trim();
+    if ((h === 'name' || h === 'nombre') && nameCol === -1) nameCol = i;
+  }
+
+  // colIndex del crítico: header que termina en " rating", datos = RATING(1-based) - 5
+  var colIndex = null;
+  for (var c = 0; c < headers.length; c++) {
+    var hc = String(headers[c]).toLowerCase().trim();
+    if (hc.endsWith(' rating')) {
+      var critName = hc.replace(/ rating$/i, '').trim();
+      if (critName.toLowerCase() === critico.toLowerCase()) {
+        colIndex = (c + 1) - 5;
+        break;
+      }
+    }
+  }
+
+  // Fila del alfajor por nombre
+  var rowIndex = null;
+  var target = alfajorName.toLowerCase();
+  for (var r = 1; r < data.length; r++) {
+    var rn = nameCol >= 0 ? String(data[r][nameCol]).trim().toLowerCase() : '';
+    if (rn === target) { rowIndex = r + 1; break; }
+  }
+
+  if (!rowIndex || !colIndex) return base;
+
+  base.tokenInfo = {
+    type: 'alfajor',
+    critico: critico,
+    alfajor: alfajorName,
+    rowIndex: rowIndex,
+    colIndex: colIndex
+  };
+  return base;
+}
+
 // =============================================
 // SUBMIT REVIEW (flujo POST original)
 // =============================================
@@ -388,8 +516,6 @@ function handleReviewSubmit(postData) {
   if (!rowIndex || !colIndex || !vals) {
     throw new Error("Datos de envío inválidos o incompletos.");
   }
-  validateScores(vals);
-
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var linksSheet = ss.getSheetByName(LINKS_SHEET_NAME);
   if (!linksSheet) {
@@ -405,6 +531,29 @@ function handleReviewSubmit(postData) {
   if (String(linksData[idx][4]) === 'usado') {
     throw new Error("Este enlace ya ha sido utilizado para enviar una reseña.");
   }
+
+  // El tipo lo manda el servidor (fila de links), no el cliente.
+  var linkTipo = String(found.row[6] || '').toLowerCase().trim();
+
+  // --- Alfajor: escribe las 5 dimensiones en la hoja de alfajores ---
+  if (linkTipo === 'alfajor') {
+    validateScoresAlfajor(vals);
+    var aSheet = getAlfajoresSheet_();
+    if (!aSheet) throw new Error("No se encontró la hoja de alfajores.");
+
+    var alfaValues = ALFAJOR_SCORE_KEYS.map(function (k) { return sanitizeCellValue(vals[k]); });
+    aSheet.getRange(rowIndex, colIndex, 1, 5).setValues([alfaValues]);
+
+    linksSheet.getRange(found.rowIndex, 5).setValue('usado');
+
+    return {
+      success: true,
+      message: "Reseña de alfajor de " + postData.criticName + " guardada para " + postData.restaurantName
+    };
+  }
+
+  // --- Restaurante (flujo original) ---
+  validateScores(vals);
 
   var sheet = ss.getSheetByName(SHEET_NAME);
 
@@ -501,13 +650,71 @@ function getAdminData() {
     restaurants.push(resto);
   }
 
+  var alfajoresInfo = getAlfajoresAdminList_();
+
   return {
     success: true,
     restaurants: restaurants,
     critics: critics,
     columnMap: colMap,
     headers: headers.map(function(h) { return String(h); }),
-    nextId: ("0000000" + (maxId + 1)).slice(-7)
+    nextId: ("0000000" + (maxId + 1)).slice(-7),
+    alfajores: alfajoresInfo.alfajores,
+    alfajorCritics: alfajoresInfo.alfajorCritics,
+    nextAlfajorId: alfajoresInfo.nextAlfajorId
+  };
+}
+
+/**
+ * ADMIN: lista de alfajores + críticos + próximo ID (para el panel).
+ */
+function getAlfajoresAdminList_() {
+  var empty = { alfajores: [], alfajorCritics: [], nextAlfajorId: '0000001' };
+  var sheet = getAlfajoresSheet_();
+  if (!sheet) return empty;
+
+  var data = sheet.getDataRange().getValues();
+  if (data.length === 0) return empty;
+
+  var headers = data[0];
+  var colMap = buildColumnMap(headers);
+
+  var critics = [];
+  for (var i = 0; i < headers.length; i++) {
+    var h = String(headers[i]).toLowerCase().trim();
+    if (h.endsWith(' rating')) {
+      var critName = h.replace(/ rating$/i, '').trim();
+      critName = critName.charAt(0).toUpperCase() + critName.slice(1);
+      critics.push(critName);
+    }
+  }
+
+  var maxId = 0;
+  var alfajores = [];
+  for (var r = 1; r < data.length; r++) {
+    var row = data[r];
+
+    var idVal = getVal(row, colMap, 'id');
+    var pId = parseInt(idVal, 10);
+    if (!isNaN(pId) && pId > maxId) maxId = pId;
+    if (idVal) idVal = ("0000000" + parseInt(idVal, 10)).slice(-7);
+
+    var nameVal = getVal(row, colMap, 'name') || getVal(row, colMap, 'nombre');
+    if (!nameVal && !idVal) continue;
+
+    alfajores.push({
+      rowIndex: r + 1,
+      id: idVal,
+      name: nameVal,
+      description: getVal(row, colMap, 'description') || getVal(row, colMap, 'descripcion') || '',
+      web: getVal(row, colMap, 'web') || ''
+    });
+  }
+
+  return {
+    alfajores: alfajores,
+    alfajorCritics: critics,
+    nextAlfajorId: ("0000000" + (maxId + 1)).slice(-7)
   };
 }
 
@@ -695,11 +902,20 @@ function addRestaurant(postData) {
 // =============================================
 function generateToken(postData) {
   var critico = postData.critico;
-  var fecha = postData.fecha;
   var restaurante = postData.restaurante;
 
-  if (!critico || !fecha || !restaurante) {
-    throw new Error("Faltan datos: crítico, fecha y restaurante son obligatorios.");
+  // tipo: 'restaurant' (default / legacy) | 'alfajor'
+  var tipo = String(postData.tipo || 'restaurant').toLowerCase().trim();
+  if (tipo !== 'alfajor') tipo = 'restaurant';
+
+  // Los alfajores no usan fecha (1 fila por producto).
+  var fecha = tipo === 'alfajor' ? '' : postData.fecha;
+
+  if (!critico || !restaurante) {
+    throw new Error("Faltan datos: crítico y " + (tipo === 'alfajor' ? 'alfajor' : 'restaurante') + " son obligatorios.");
+  }
+  if (tipo === 'restaurant' && !fecha) {
+    throw new Error("Falta la fecha.");
   }
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -707,10 +923,13 @@ function generateToken(postData) {
   var linksSheet = ss.getSheetByName(LINKS_SHEET_NAME);
   if (!linksSheet) {
     linksSheet = ss.insertSheet(LINKS_SHEET_NAME);
-    linksSheet.getRange(1, 1, 1, 6).setValues([
-      ['Token (hash)', 'Crítico', 'Fecha', 'Restaurante', 'Estado', 'Creado']
+    linksSheet.getRange(1, 1, 1, 7).setValues([
+      ['Token (hash)', 'Crítico', 'Fecha', 'Restaurante', 'Estado', 'Creado', 'Tipo']
     ]);
-    linksSheet.getRange(1, 1, 1, 6).setFontWeight('bold');
+    linksSheet.getRange(1, 1, 1, 7).setFontWeight('bold');
+  } else if (!String(linksSheet.getRange(1, 7).getValue()).trim()) {
+    // Sheet legacy de 6 columnas: agregamos el header 'Tipo' (no rompe filas viejas).
+    linksSheet.getRange(1, 7).setValue('Tipo').setFontWeight('bold');
   }
 
   var token = generateRandomToken();
@@ -732,16 +951,155 @@ function generateToken(postData) {
   }
 
   var timestamp = new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
-  linksSheet.appendRow([tokenHash, sanitizeCellValue(critico), sanitizeCellValue(fecha), sanitizeCellValue(restaurante), 'pendiente', timestamp]);
+  linksSheet.appendRow([tokenHash, sanitizeCellValue(critico), sanitizeCellValue(fecha), sanitizeCellValue(restaurante), 'pendiente', timestamp, tipo]);
 
   var scriptUrl = ScriptApp.getService().getUrl();
   var fullUrl = scriptUrl + '?id=' + token;
+
+  var label = tipo === 'alfajor' ? (critico + " — " + restaurante + " (alfajor)")
+                                 : (critico + " — " + restaurante + " (" + fecha + ")");
 
   return {
     success: true,
     token: token,
     url: fullUrl,
-    message: "Link generado para " + critico + " — " + restaurante + " (" + fecha + ")"
+    tipo: tipo,
+    message: "Link generado para " + label
+  };
+}
+
+// =============================================
+// ADMIN ALFAJORES: Crear un nuevo alfajor
+// =============================================
+function addAlfajor(postData) {
+  var datos = postData.data;
+  validateAlfajor(datos);
+
+  var sheet = getAlfajoresSheet_();
+  if (!sheet) throw new Error("No se encontró la hoja de alfajores (gid " + ALFAJORES_SHEET_GID + ").");
+
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var colMap = buildColumnMap(headers);
+
+  var idColIdx = colMap['id'];
+  var insertRowIndex = sheet.getLastRow() + 1;
+  var idGenerado = ("0000000" + 1).slice(-7);
+
+  if (idColIdx !== undefined && idColIdx !== null) {
+    var idValues = sheet.getRange(2, idColIdx + 1, sheet.getMaxRows() - 1, 1).getValues();
+    var maxId = 0;
+    var lastPopulatedIdx = -1;
+    for (var i = 0; i < idValues.length; i++) {
+      var strVal = String(idValues[i][0]).trim();
+      if (strVal !== '') {
+        lastPopulatedIdx = i;
+        var pId = parseInt(strVal, 10);
+        if (!isNaN(pId) && pId > maxId) maxId = pId;
+      }
+    }
+    insertRowIndex = lastPopulatedIdx + 3;
+    idGenerado = ("0000000" + (maxId + 1)).slice(-7);
+    datos['id'] = idGenerado;
+  } else {
+    var nameColIdx = colMap['name'] !== undefined ? colMap['name'] : colMap['nombre'];
+    if (nameColIdx !== undefined && nameColIdx !== null) {
+      var nameValues = sheet.getRange(2, nameColIdx + 1, sheet.getMaxRows() - 1, 1).getValues();
+      var lastIdx = -1;
+      for (var j = 0; j < nameValues.length; j++) {
+        if (String(nameValues[j][0]).trim() !== '') lastIdx = j;
+      }
+      insertRowIndex = lastIdx + 3;
+    }
+  }
+
+  var fieldToHeader = {
+    'id': 'id',
+    'name': 'name',
+    'description': 'description',
+    'web': 'web'
+  };
+
+  for (var field in fieldToHeader) {
+    if (datos.hasOwnProperty(field)) {
+      var headerName = fieldToHeader[field];
+      var colIdx = colMap[headerName];
+      if (colIdx !== undefined && colIdx !== null) {
+        var range = sheet.getRange(insertRowIndex, colIdx + 1);
+        if (field === 'id') range.setNumberFormat('@');
+        range.setValue(sanitizeCellValue(datos[field]));
+      }
+    }
+  }
+
+  // Copiar fórmulas de las columnas "… rating" (RATING por crítico) desde la fila anterior
+  if (insertRowIndex > 2) {
+    for (var k = 0; k < headers.length; k++) {
+      var hk = String(headers[k]).toLowerCase().trim();
+      if (hk.endsWith(' rating')) {
+        var sourceRange = sheet.getRange(insertRowIndex - 1, k + 1);
+        var destRange = sheet.getRange(insertRowIndex, k + 1);
+        sourceRange.copyTo(destRange, SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
+      }
+    }
+  }
+
+  try {
+    updateFormAlfajores();
+  } catch (e) {
+    Logger.log("Non-fatal error updating alfajor form: " + e);
+  }
+
+  return {
+    success: true,
+    message: "Alfajor '" + datos.name + "' creado exitosamente.",
+    rowIndex: insertRowIndex,
+    idGenerado: idGenerado
+  };
+}
+
+// =============================================
+// ADMIN ALFAJORES: Actualizar un alfajor existente
+// =============================================
+function updateAlfajor(postData) {
+  var rowIndex = parseInt(postData.rowIndex);
+  var datos = postData.data;
+
+  if (!rowIndex || !datos) {
+    throw new Error("Faltan datos para actualizar el alfajor.");
+  }
+  validateAlfajor(datos);
+
+  var sheet = getAlfajoresSheet_();
+  if (!sheet) throw new Error("No se encontró la hoja de alfajores.");
+
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var colMap = buildColumnMap(headers);
+
+  var fieldToHeader = {
+    'name': 'name',
+    'description': 'description',
+    'web': 'web'
+  };
+
+  for (var field in fieldToHeader) {
+    if (datos.hasOwnProperty(field)) {
+      var headerName = fieldToHeader[field];
+      var colIdx = colMap[headerName];
+      if (colIdx !== undefined && colIdx !== null) {
+        sheet.getRange(rowIndex, colIdx + 1).setValue(sanitizeCellValue(datos[field]));
+      }
+    }
+  }
+
+  try {
+    updateFormAlfajores();
+  } catch (e) {
+    Logger.log("Non-fatal error updating alfajor form: " + e);
+  }
+
+  return {
+    success: true,
+    message: "Alfajor '" + (datos.name || '') + "' actualizado correctamente."
   };
 }
 

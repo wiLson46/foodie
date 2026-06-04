@@ -1065,6 +1065,50 @@
                 </div>
 
                 <!-- =======================================
+                     SECTION B2: Nuevo Alfajor
+                     ======================================= -->
+                <div class="admin-section" id="section-add-alfajor">
+                    <div class="section-header" onclick="toggleSection('add-alfajor')">
+                        <div class="section-header-left">
+                            <div class="section-icon">
+                                <i data-lucide="cookie"></i>
+                            </div>
+                            <div>
+                                <div class="section-title">Alfajores</div>
+                                <div class="section-subtitle">Registrar un nuevo alfajor</div>
+                            </div>
+                        </div>
+                        <i data-lucide="chevron-down" class="section-chevron" id="chevron-add-alfajor"></i>
+                    </div>
+                    <div class="section-body" id="body-add-alfajor">
+                        <form id="new-alfajor-form" onsubmit="return false;">
+                            <div class="restaurant-fields-grid">
+                                <div class="admin-form-group">
+                                    <label class="admin-label"><i data-lucide="hash"></i> ID</label>
+                                    <input type="text" class="admin-input" id="new-alfajor-id" value="Auto" disabled style="background: rgba(0,0,0,0.05); font-weight: bold; color: var(--gold);">
+                                </div>
+                                <div class="admin-form-group">
+                                    <label class="admin-label"><i data-lucide="cookie"></i> Nombre *</label>
+                                    <input type="text" class="admin-input" id="new-alfajor-name" placeholder="Nombre del alfajor" required>
+                                </div>
+                                <div class="admin-form-group field-full">
+                                    <label class="admin-label"><i data-lucide="file-text"></i> Descripción</label>
+                                    <textarea class="admin-textarea" id="new-alfajor-description" placeholder="Descripción del alfajor..."></textarea>
+                                </div>
+                                <div class="admin-form-group field-full">
+                                    <label class="admin-label"><i data-lucide="globe"></i> Web</label>
+                                    <input type="text" class="admin-input" id="new-alfajor-web" placeholder="https://...">
+                                </div>
+                            </div>
+                            <button type="button" class="admin-btn btn-create" id="btn-create-alfajor" onclick="createAlfajor()">
+                                <span class="btn-label"><i data-lucide="plus"></i> Crear Alfajor</span>
+                                <div class="btn-spinner"></div>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- =======================================
                      SECTION C: Generador de Links
                      ======================================= -->
                 <div class="admin-section" id="section-links">
@@ -1081,6 +1125,10 @@
                         <i data-lucide="chevron-down" class="section-chevron" id="chevron-links"></i>
                     </div>
                     <div class="section-body" id="body-links">
+                        <div class="stats-toggle" id="link-type-switcher" style="margin-bottom: 1.25rem;">
+                            <button type="button" class="stats-toggle-btn active" data-link-type="restaurant" onclick="setLinkType('restaurant')">🍴 Restaurante</button>
+                            <button type="button" class="stats-toggle-btn" data-link-type="alfajor" onclick="setLinkType('alfajor')">🍫 Alfajor</button>
+                        </div>
                         <div class="links-fields-grid">
                             <div class="admin-form-group">
                                 <label class="admin-label"><i data-lucide="user"></i> Crítico</label>
@@ -1089,12 +1137,12 @@
                                 </select>
                             </div>
                             <div class="admin-form-group">
-                                <label class="admin-label"><i data-lucide="utensils"></i> Restaurante</label>
+                                <label class="admin-label" id="link-resto-label"><i data-lucide="utensils"></i> <span id="link-resto-label-text">Restaurante</span></label>
                                 <select class="admin-select" id="link-restaurante">
                                     <option value="" disabled selected>Selecciona restaurante</option>
                                 </select>
                             </div>
-                            <div class="admin-form-group">
+                            <div class="admin-form-group" id="link-fecha-group">
                                 <label class="admin-label"><i data-lucide="calendar"></i> Fecha</label>
                                 <select class="admin-select" id="link-fecha" disabled>
                                     <option value="" disabled selected>Elige fecha</option>
@@ -1128,8 +1176,8 @@
                                 <i data-lucide="list"></i>
                             </div>
                             <div>
-                                <div class="section-title">Gestión de Restaurantes <span class="count-badge" id="restaurant-count">0</span></div>
-                                <div class="section-subtitle">Editar datos de restaurantes existentes</div>
+                                <div class="section-title">Gestión de Restaurantes y Alfajores <span class="count-badge" id="restaurant-count">0</span></div>
+                                <div class="section-subtitle">Editar datos de restaurantes y alfajores existentes</div>
                             </div>
                         </div>
                         <i data-lucide="chevron-down" class="section-chevron" id="chevron-restaurants"></i>
@@ -1139,7 +1187,7 @@
                         <div class="search-bar">
                             <i data-lucide="search"></i>
                             <input type="text" class="admin-input" id="search-restaurants"
-                                placeholder="Buscar restaurante..." oninput="filterRestaurants()">
+                                placeholder="Buscar restaurante o alfajor..." oninput="filterRestaurants()">
                         </div>
 
                         <!-- Restaurant blocks container -->

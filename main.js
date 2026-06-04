@@ -7,13 +7,18 @@ const CFG = window.COMER_CONFIG || {};
 const CONFIG = {
     mainDataSheet: CFG.MAIN_DATA_SHEET,
     votesSheet: CFG.VOTES_SHEET,
+    alfajoresSheet: CFG.ALFAJORES_SHEET,
+    alfajoresVotesSheet: CFG.ALFAJORES_VOTES_SHEET,
     tabsData: {
         presencial: ['ranking', 'map'],
-        delivery: ['ranking']
+        delivery: ['ranking'],
+        alfajores: ['ranking']
     }
 };
 
 const TRACKING_URL = CFG.TRACKING_URL;
+const VOTE_FORM_URL = CFG.VOTE_FORM_URL || '';
+const VOTE_FORM_URL_ALFAJOR = CFG.VOTE_FORM_URL_ALFAJOR || '';
 const INITIAL_PHOTOS_LIMIT = CFG.INITIAL_PHOTOS_LIMIT || 6;
 const DEBUG = !!CFG.DEBUG;
 
@@ -73,6 +78,11 @@ let currentSort = 'score';
 let currentMode = 'presencial';
 let currentLocation = 'all';
 let publicVotes = {};
+
+// --- ALFAJORES STATE ---
+let allAlfajores = [];
+let alfajoresLoaded = false;
+let publicVotesAlfajor = {};
 
 // Original meta state (to restore when leaving detail)
 const ORIGINAL_TITLE = document.title;
@@ -219,8 +229,66 @@ async function fetchData() {
         return;
     }
 
-    filterByMode();
+    await filterByMode();
     handleRouteChange();
+}
+
+/**
+ * Carga (lazy, una sola vez) el ranking de alfajores desde su propio CSV.
+ * Mapea las 5 dimensiones (relleno, tapas, armonía, presentación, precio) por crítico.
+ */
+async function fetchAlfajores() {
+    if (alfajoresLoaded) return;
+    try {
+        const [alfData, votesData] = await Promise.all([
+            fetchSheet(CONFIG.alfajoresSheet),
+            CONFIG.alfajoresVotesSheet ? fetchSheet(CONFIG.alfajoresVotesSheet).catch(() => []) : Promise.resolve([])
+        ]);
+
+        publicVotesAlfajor = buildVotes(votesData, 'alfajor a votar');
+
+        if (isValidData(alfData)) {
+            const firstRowKeys = Object.keys(alfData[0]);
+            const criticNames = firstRowKeys
+                .filter(k => k.endsWith(' rating'))
+                .map(k => k.replace(' rating', '').trim());
+
+            allAlfajores = alfData
+                .filter(r => (r.name || r.nombre || '').trim() !== '')
+                .map((r, index) => {
+                    const critics = {};
+                    criticNames.forEach(critic => {
+                        if (r[`${critic} rating`]) {
+                            critics[critic] = {
+                                rating: r[`${critic} rating`],
+                                relleno: r[`${critic} relleno`],
+                                tapas: r[`${critic} tapas`],
+                                armonia: r[`${critic} armonia`],
+                                presentacion: r[`${critic} presentacion`],
+                                precio: r[`${critic} precio`]
+                            };
+                        }
+                    });
+                    return {
+                        ...r,
+                        name: r.name || r.nombre,
+                        rating: r.rating || r.promedio || r.score || '0',
+                        rank: r.ranking || r.rank || index + 1,
+                        description: r.description || r.descripcion || '',
+                        web: r.web || '',
+                        fotos: r.fotos || '',
+                        isAlfajor: true,
+                        critics: critics
+                    };
+                });
+        } else {
+            allAlfajores = [];
+        }
+    } catch (err) {
+        console.error('[FetchAlfajores] Error:', err);
+        allAlfajores = [];
+    }
+    alfajoresLoaded = true;
 }
 
 function scheduleIdle(fn) {
@@ -231,24 +299,37 @@ function scheduleIdle(fn) {
     }
 }
 
-function processVotes(votesData) {
-    publicVotes = {};
-    if (!votesData || votesData.length === 0) return;
+function buildVotes(votesData, nameKey) {
+    const store = {};
+    if (!votesData || votesData.length === 0) return store;
     votesData.forEach(v => {
-        const name = (v['lugar a votar'] || '').trim().toLowerCase();
+        const name = (v[nameKey] || '').trim().toLowerCase();
         const score = parseFloat(v['puntuar']);
         if (name && !isNaN(score)) {
-            if (!publicVotes[name]) publicVotes[name] = { total: 0, count: 0 };
-            publicVotes[name].total += score;
-            publicVotes[name].count++;
+            if (!store[name]) store[name] = { total: 0, count: 0 };
+            store[name].total += score;
+            store[name].count++;
         }
     });
-    Object.keys(publicVotes).forEach(key => {
-        publicVotes[key].avg = (publicVotes[key].total / publicVotes[key].count).toFixed(1);
+    Object.keys(store).forEach(key => {
+        store[key].avg = (store[key].total / store[key].count).toFixed(1);
     });
+    return store;
 }
 
-function filterByMode() {
+function processVotes(votesData) {
+    publicVotes = buildVotes(votesData, 'lugar a votar');
+}
+
+async function filterByMode() {
+    if (currentMode === 'alfajores') {
+        await fetchAlfajores();
+        restaurants = allAlfajores.slice();
+        currentLocation = 'all';
+        applyLocationFilter(); // alfajor no tiene ubicación → sin populateLocationFilter
+        return;
+    }
+
     if (currentMode === 'presencial') {
         restaurants = allRestaurants.filter(r => r.presencialDelivery === 'P');
     } else {
@@ -358,7 +439,10 @@ function renderRanking() {
     const dataToRender = filteredRestaurants.length > 0 ? filteredRestaurants : restaurants;
 
     if (dataToRender.length === 0) {
-        rankingList.innerHTML = '<div style="text-align:center; padding:3rem; color:var(--text-muted);">No se encontraron restaurantes para esta ubicación.</div>';
+        const emptyMsg = currentMode === 'alfajores'
+            ? 'Todavía no hay alfajores cargados.'
+            : 'No se encontraron restaurantes para esta ubicación.';
+        rankingList.innerHTML = `<div style="text-align:center; padding:3rem; color:var(--text-muted);">${emptyMsg}</div>`;
         return;
     }
 
@@ -390,7 +474,7 @@ function renderRanking() {
                         <div class="date-value">${safeDate}</div>
                     </div>` : ''}
                 </div>
-                <p class="restaurant-location">${safeLocation}</p>
+                ${currentMode === 'alfajores' ? '' : `<p class="restaurant-location">${safeLocation}</p>`}
             </div>
             <div class="score-box">
                 <div class="score-label">Puntaje</div>
@@ -689,6 +773,53 @@ function generateScoresTableHTML(res) {
     `;
 }
 
+function generateAlfajorScoresTableHTML(res) {
+    if (!res.critics || Object.keys(res.critics).length === 0) {
+        return `
+            <div style="padding:2rem; text-align:center; color:var(--text-muted);">
+                <p style="font-size:0.9rem;">No hay detalles de puntajes para este alfajor.</p>
+            </div>
+        `;
+    }
+
+    const criticNames = Object.keys(res.critics);
+    let rowsHtml = '';
+
+    criticNames.forEach(critic => {
+        const c = res.critics[critic];
+        rowsHtml += `
+            <tr class="score-row">
+                <td class="col-critic">${escapeHtml(critic)}</td>
+                <td class="col-score col-avg">${escapeHtml(c.rating || '-')}</td>
+                <td class="col-score">${escapeHtml(c.relleno || '-')}</td>
+                <td class="col-score">${escapeHtml(c.tapas || '-')}</td>
+                <td class="col-score">${escapeHtml(c.armonia || '-')}</td>
+                <td class="col-score">${escapeHtml(c.presentacion || '-')}</td>
+                <td class="col-score">${escapeHtml(c.precio || '-')}</td>
+            </tr>
+        `;
+    });
+
+    return `
+        <table class="scores-table">
+            <thead>
+                <tr class="score-header-row">
+                    <th style="text-align:left;">Crítico</th>
+                    <th>Prom.</th>
+                    <th><i data-lucide="cookie" class="header-icon" aria-hidden="true"></i> Relleno</th>
+                    <th><i data-lucide="layers" class="header-icon" aria-hidden="true"></i> Tapas</th>
+                    <th><i data-lucide="heart" class="header-icon" aria-hidden="true"></i> Armonía</th>
+                    <th><i data-lucide="image" class="header-icon" aria-hidden="true"></i> Present.</th>
+                    <th><i data-lucide="dollar-sign" class="header-icon" aria-hidden="true"></i> Precio</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rowsHtml}
+            </tbody>
+        </table>
+    `;
+}
+
 function getRestaurantSlug(name) {
     if (!name) return '';
     return String(name).toLowerCase()
@@ -700,7 +831,8 @@ function getRestaurantSlug(name) {
 
 function findRestaurantBySlug(slug) {
     return restaurants.find(r => getRestaurantSlug(r.name) === slug)
-        || allRestaurants.find(r => getRestaurantSlug(r.name) === slug);
+        || allRestaurants.find(r => getRestaurantSlug(r.name) === slug)
+        || allAlfajores.find(r => getRestaurantSlug(r.name) === slug);
 }
 
 function setMeta(name, content, isProperty) {
@@ -795,10 +927,17 @@ function showDetail(res, updateUrl = true) {
 
     const photosString = res.fotos || res.images || res.photos || '';
 
+    const isAlf = !!res.isAlfajor;
     const voteKey = (res.name || '').trim().toLowerCase();
-    const voteData = publicVotes[voteKey];
+    const votesStore = isAlf ? publicVotesAlfajor : publicVotes;
+    const voteData = votesStore[voteKey];
     const publicScore = voteData ? voteData.avg : '-';
     const voteCount = voteData ? voteData.count : 0;
+    const voteFormUrl = isAlf ? VOTE_FORM_URL_ALFAJOR : VOTE_FORM_URL;
+
+    // Web del alfajor (normalizada con protocolo)
+    const webUrl = res.web || '';
+    const webHref = webUrl ? (/^https?:\/\//i.test(webUrl) ? webUrl : 'https://' + webUrl) : '';
 
     const safeName = escapeHtml(res.name);
     const safeLocation = escapeHtml(res.location || 'Global Selection');
@@ -812,15 +951,63 @@ function showDetail(res, updateUrl = true) {
     const safeOrderedBy = escapeHtml(orderedBy);
     const safePublic = escapeHtml(publicScore);
 
+    const infoListHtml = isAlf
+        ? (webHref
+            ? `<a href="${escapeHtml(webHref)}" target="_blank" rel="noopener" class="info-item active link">
+                    <i data-lucide="globe" aria-hidden="true"></i>
+                    <span>Ver la web del alfajor</span>
+                </a>`
+            : `<div class="info-item inactive">
+                    <i data-lucide="globe" aria-hidden="true"></i>
+                    <span>Web no disponible</span>
+                </div>`)
+        : `
+            <div class="info-item ${address ? 'active' : 'inactive'}">
+                <i data-lucide="map-pin" aria-hidden="true"></i>
+                <span>${safeAddress || 'Dirección no disponible'}</span>
+            </div>
+
+            <div class="info-item ${phone ? 'active' : 'inactive'}">
+                <i data-lucide="phone" aria-hidden="true"></i>
+                <span>${safePhone || 'Teléfono no disponible'}</span>
+            </div>
+
+            ${instagramLink ?
+                `<a href="${safeInstagramLink}" target="_blank" rel="noopener" class="info-item active link">
+                    <i data-lucide="instagram" aria-hidden="true"></i>
+                    <span>Ver el IG del local</span>
+                </a>` :
+                `<div class="info-item inactive">
+                    <i data-lucide="instagram" aria-hidden="true"></i>
+                    <span>Ver el IG del local</span>
+                </div>`}
+
+            ${(mapLink && res.presencialDelivery === 'P') ?
+                `<a href="${safeMapLink}" target="_blank" rel="noopener" class="info-item active link">
+                    <i data-lucide="map" aria-hidden="true"></i>
+                    <span>Ir al local</span>
+                </a>` :
+                (res.presencialDelivery === 'P' ? `<div class="info-item inactive">
+                    <i data-lucide="map" aria-hidden="true"></i>
+                    <span>Ir al local</span>
+                </div>` : '')}
+
+            ${orderedBy ?
+                `<div class="info-item active">
+                    <i data-lucide="shopping-bag" aria-hidden="true"></i>
+                    <span>Pedido por: <strong>${safeOrderedBy}</strong></span>
+                </div>` : ''}
+        `;
+
     restaurantContent.innerHTML = `
         <div class="detail-header">
             <div class="detail-header-grid">
                 <div class="detail-rank ${medalClass}">${rank > 0 ? rank : '-'}</div>
                 <h1 class="detail-title">${safeName}</h1>
-                <div class="detail-date-box">
+                ${visitDate ? `<div class="detail-date-box">
                     <div class="date-label">VISITADO EL</div>
                     <div class="date-value">${safeDate}</div>
-                </div>
+                </div>` : ''}
 
                 <div class="scores-wrapper">
                     <div class="detail-score-box">
@@ -836,13 +1023,13 @@ function showDetail(res, updateUrl = true) {
                         </div>
                     </div>
 
-                    <button class="vote-btn" type="button" id="vote-btn">
+                    ${voteFormUrl ? `<button class="vote-btn" type="button" id="vote-btn">
                         <i data-lucide="star" aria-hidden="true"></i>
                         <span>Votá acá</span>
-                    </button>
+                    </button>` : ''}
                 </div>
 
-                <p class="detail-location">${safeLocation}</p>
+                ${isAlf ? '' : `<p class="detail-location">${safeLocation}</p>`}
 
                 <div class="detail-description">
                     <p>${safeDescription}</p>
@@ -851,44 +1038,7 @@ function showDetail(res, updateUrl = true) {
         </div>
 
         <div class="detail-info-list">
-            <div class="info-item ${address ? 'active' : 'inactive'}">
-                <i data-lucide="map-pin" aria-hidden="true"></i>
-                <span>${safeAddress || 'Dirección no disponible'}</span>
-            </div>
-
-            <div class="info-item ${phone ? 'active' : 'inactive'}">
-                <i data-lucide="phone" aria-hidden="true"></i>
-                <span>${safePhone || 'Teléfono no disponible'}</span>
-            </div>
-
-            ${instagramLink ?
-            `<a href="${safeInstagramLink}" target="_blank" rel="noopener" class="info-item active link">
-                    <i data-lucide="instagram" aria-hidden="true"></i>
-                    <span>Ver el IG del local</span>
-                </a>` :
-            `<div class="info-item inactive">
-                    <i data-lucide="instagram" aria-hidden="true"></i>
-                    <span>Ver el IG del local</span>
-                </div>`
-        }
-
-            ${(mapLink && res.presencialDelivery === 'P') ?
-            `<a href="${safeMapLink}" target="_blank" rel="noopener" class="info-item active link">
-                    <i data-lucide="map" aria-hidden="true"></i>
-                    <span>Ir al local</span>
-                </a>` :
-            (res.presencialDelivery === 'P' ? `<div class="info-item inactive">
-                    <i data-lucide="map" aria-hidden="true"></i>
-                    <span>Ir al local</span>
-                </div>` : '')
-        }
-
-             ${orderedBy ?
-            `<div class="info-item active">
-                    <i data-lucide="shopping-bag" aria-hidden="true"></i>
-                    <span>Pedido por: <strong>${safeOrderedBy}</strong></span>
-                </div>` : ''
-        }
+            ${infoListHtml}
         </div>
 
         <div class="detail-tabs-container">
@@ -903,16 +1053,16 @@ function showDetail(res, updateUrl = true) {
 
             <div id="puntajes-content" class="sub-tab-content hidden">
                 <div class="scores-table-container">
-                    ${generateScoresTableHTML(res)}
+                    ${isAlf ? generateAlfajorScoresTableHTML(res) : generateScoresTableHTML(res)}
                 </div>
             </div>
         </div>
     `;
 
     const voteBtn = document.getElementById('vote-btn');
-    if (voteBtn) {
+    if (voteBtn && voteFormUrl) {
         voteBtn.addEventListener('click', () => {
-            window.open('https://docs.google.com/forms/d/e/1FAIpQLSccteyXdae90sOgyONjnyXqJCjRWk211Vjk89aMDR0_3qyr-A/viewform', '_blank', 'noopener');
+            window.open(voteFormUrl, '_blank', 'noopener');
         });
     }
 
@@ -1013,7 +1163,7 @@ function readFiltersFromUrl() {
         const m = params.get('mode');
         const s = params.get('sort');
         const l = params.get('location');
-        if (m === 'presencial' || m === 'delivery') currentMode = m;
+        if (m === 'presencial' || m === 'delivery' || m === 'alfajores') currentMode = m;
         if (s === 'score' || s === 'date' || s === 'name') currentSort = s;
         if (l) currentLocation = l;
     } catch (e) {}
@@ -1242,11 +1392,17 @@ function setupFilters() {
     }
 }
 
+function updateChromeForMode() {
+    // En modo alfajores ocultamos el filtro de ubicación (los alfajores no tienen ubicación).
+    const locGroup = locationFilter ? locationFilter.closest('.filter-group') : null;
+    if (locGroup) locGroup.style.display = (currentMode === 'alfajores') ? 'none' : '';
+}
+
 function setupModeSwitcher() {
     const modeBtns = document.querySelectorAll('.mode-btn');
 
     modeBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             const newMode = btn.getAttribute('data-mode');
             if (newMode === currentMode) return;
 
@@ -1268,7 +1424,12 @@ function setupModeSwitcher() {
                 document.querySelector('.tab-btn[data-tab="ranking"]').click();
             }
 
-            filterByMode();
+            updateChromeForMode();
+
+            // Skeleton mientras carga el CSV de alfajores la primera vez
+            if (currentMode === 'alfajores' && !alfajoresLoaded) renderSkeleton();
+
+            await filterByMode();
             syncFiltersToUrl();
         });
     });
@@ -1284,6 +1445,8 @@ function applyInitialFiltersUI() {
         const tabId = tab.getAttribute('data-tab');
         tab.style.display = activeTabsForMode.includes(tabId) ? 'flex' : 'none';
     });
+
+    updateChromeForMode();
 }
 
 function registerServiceWorker() {

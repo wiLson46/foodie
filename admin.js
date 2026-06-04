@@ -15,6 +15,7 @@ let adminData = {
 };
 
 let generatedUrl = '';
+let linkType = 'restaurant'; // 'restaurant' | 'alfajor' (generador de links)
 
 const statusText = document.getElementById('status-text');
 const adminLoader = document.getElementById('admin-loader');
@@ -86,6 +87,18 @@ async function initAdmin() {
         if (adminData.nextId) {
             const newIdInput = document.getElementById('new-id');
             if (newIdInput) newIdInput.value = adminData.nextId;
+        }
+
+        if (adminData.alfajores) {
+            adminData.alfajores.sort((a, b) => (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
+        } else {
+            adminData.alfajores = [];
+        }
+        if (!adminData.alfajorCritics) adminData.alfajorCritics = [];
+
+        if (adminData.nextAlfajorId) {
+            const newAlfIdInput = document.getElementById('new-alfajor-id');
+            if (newAlfIdInput) newAlfIdInput.value = adminData.nextAlfajorId;
         }
 
         renderRestaurants();
@@ -163,7 +176,7 @@ function renderRestaurants(filterText = '') {
         list.innerHTML = `
             <div class="empty-state" style="padding: 3rem 1.5rem; opacity: 0.5;">
                 <i data-lucide="search" style="width: 40px; height: 40px; margin-bottom: 1rem;"></i>
-                <p style="font-weight: 500;">Ingresá un nombre para gestionar restaurantes</p>
+                <p style="font-weight: 500;">Ingresá un nombre para gestionar restaurantes o alfajores</p>
             </div>
         `;
         restaurantCount.textContent = '0';
@@ -171,11 +184,13 @@ function renderRestaurants(filterText = '') {
         return;
     }
 
-    if (!adminData.restaurants || adminData.restaurants.length === 0) {
+    const noRestos = !adminData.restaurants || adminData.restaurants.length === 0;
+    const noAlfajores = !adminData.alfajores || adminData.alfajores.length === 0;
+    if (noRestos && noAlfajores) {
         list.innerHTML = `
             <div class="empty-state">
                 <i data-lucide="inbox"></i>
-                <p>No hay restaurantes en la tabla</p>
+                <p>No hay restaurantes ni alfajores en la tabla</p>
             </div>
         `;
         restaurantCount.textContent = '0';
@@ -183,20 +198,23 @@ function renderRestaurants(filterText = '') {
         return;
     }
 
-    const filtered = adminData.restaurants.filter(r => {
-        const q = filterText.toLowerCase();
-        return (r.name || '').toLowerCase().includes(q) ||
-            (r.location || '').toLowerCase().includes(q) ||
-            (r.id || '').toLowerCase().includes(q);
-    });
+    const q = filterText.toLowerCase();
+    const filteredRestos = (adminData.restaurants || []).filter(r =>
+        (r.name || '').toLowerCase().includes(q) ||
+        (r.location || '').toLowerCase().includes(q) ||
+        (r.id || '').toLowerCase().includes(q));
+    const filteredAlfajores = (adminData.alfajores || []).filter(a =>
+        (a.name || '').toLowerCase().includes(q) ||
+        (a.id || '').toLowerCase().includes(q));
 
-    restaurantCount.textContent = filtered.length;
+    const total = filteredRestos.length + filteredAlfajores.length;
+    restaurantCount.textContent = total;
 
-    if (filtered.length === 0) {
+    if (total === 0) {
         list.innerHTML = `
             <div class="empty-state">
                 <i data-lucide="search-x"></i>
-                <p>No se encontraron restaurantes</p>
+                <p>No se encontraron restaurantes ni alfajores</p>
             </div>
         `;
         if (window.lucide) lucide.createIcons();
@@ -204,9 +222,11 @@ function renderRestaurants(filterText = '') {
     }
 
     let html = '';
-    filtered.forEach((r) => {
-        const globalIdx = adminData.restaurants.indexOf(r);
-        html += createRestaurantCard(r, globalIdx);
+    filteredRestos.forEach((r) => {
+        html += createRestaurantCard(r, adminData.restaurants.indexOf(r));
+    });
+    filteredAlfajores.forEach((a) => {
+        html += createAlfajorCard(a, adminData.alfajores.indexOf(a));
     });
 
     list.innerHTML = html;
@@ -221,7 +241,7 @@ function createRestaurantCard(r, globalIdx) {
     <div class="restaurant-block" id="block-${globalIdx}">
         <div class="restaurant-block-header">
             <div class="restaurant-block-name">
-                ${escapeHtml(r.name || 'Sin nombre')}
+                🍴 ${escapeHtml(r.name || 'Sin nombre')}
             </div>
         </div>
 
@@ -450,14 +470,172 @@ function clearNewForm() {
 }
 
 // =============================================
+// ALFAJORES: card de edición + crear + guardar
+// =============================================
+function createAlfajorCard(a, idx) {
+    return `
+    <div class="restaurant-block" id="alfajor-block-${idx}">
+        <div class="restaurant-block-header">
+            <div class="restaurant-block-name">
+                🍫 ${escapeHtml(a.name || 'Sin nombre')}
+            </div>
+            <span class="count-badge" style="background: rgba(205,127,50,0.12); color:#CD7F32;">Alfajor</span>
+        </div>
+
+        <div class="restaurant-fields-grid">
+            <div class="admin-form-group">
+                <label class="admin-label" for="alf-edit-id-${idx}"><i data-lucide="hash"></i> ID</label>
+                <input type="text" class="admin-input" id="alf-edit-id-${idx}" value="${escapeHtml(a.id || '')}" disabled style="background: rgba(0,0,0,0.05); font-weight: bold;">
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label" for="alf-edit-name-${idx}"><i data-lucide="cookie"></i> Nombre</label>
+                <input type="text" class="admin-input" id="alf-edit-name-${idx}" value="${escapeHtml(a.name || '')}">
+            </div>
+            <div class="admin-form-group field-full">
+                <label class="admin-label" for="alf-edit-description-${idx}"><i data-lucide="file-text"></i> Descripción</label>
+                <textarea class="admin-textarea" id="alf-edit-description-${idx}">${escapeHtml(a.description || '')}</textarea>
+            </div>
+            <div class="admin-form-group field-full">
+                <label class="admin-label" for="alf-edit-web-${idx}"><i data-lucide="globe"></i> Web</label>
+                <input type="text" class="admin-input" id="alf-edit-web-${idx}" value="${escapeHtml(a.web || '')}">
+            </div>
+        </div>
+
+        <button type="button" class="admin-btn btn-save" id="alf-btn-save-${idx}" onclick="saveAlfajor(${idx})">
+            <span class="btn-label"><i data-lucide="save"></i> Guardar Cambios</span>
+            <div class="btn-spinner"></div>
+        </button>
+    </div>
+    `;
+}
+
+async function saveAlfajor(idx) {
+    const a = adminData.alfajores[idx];
+    if (!a) return;
+
+    const btn = document.getElementById(`alf-btn-save-${idx}`);
+
+    const data = {
+        name: document.getElementById(`alf-edit-name-${idx}`).value.trim(),
+        description: document.getElementById(`alf-edit-description-${idx}`).value.trim(),
+        web: document.getElementById(`alf-edit-web-${idx}`).value.trim()
+    };
+
+    if (!data.name) {
+        showToast('El nombre del alfajor es obligatorio', 'error');
+        return;
+    }
+
+    if (!confirm(`¿Guardar cambios en "${data.name}"?`)) return;
+
+    setButtonLoading(btn, true);
+
+    try {
+        const res = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'updateAlfajor',
+                rowIndex: a.rowIndex,
+                data: data,
+                adminSecret: getAdminSecret()
+            })
+        });
+
+        const result = await res.json();
+
+        if (result.success) {
+            Object.assign(adminData.alfajores[idx], data);
+            showToast(`✅ "${data.name}" guardado con éxito`, 'success');
+
+            const block = document.getElementById(`alfajor-block-${idx}`);
+            if (block) {
+                block.style.borderColor = '#2ecc71';
+                setTimeout(() => { block.style.borderColor = ''; }, 2800);
+            }
+        } else {
+            if (/no autorizado/i.test(result.message || '')) clearAdminSecret();
+            showToast(`❌ Error: ${result.message}`, 'error');
+        }
+    } catch (error) {
+        console.error('[Admin] Error guardando alfajor:', error);
+        showToast(`❌ Error de conexión: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(btn, false);
+    }
+}
+window.saveAlfajor = saveAlfajor;
+
+async function createAlfajor() {
+    const btn = document.getElementById('btn-create-alfajor');
+
+    const data = {
+        name: document.getElementById('new-alfajor-name').value.trim(),
+        description: document.getElementById('new-alfajor-description').value.trim(),
+        web: document.getElementById('new-alfajor-web').value.trim()
+    };
+
+    if (!data.name) {
+        showToast('El nombre del alfajor es obligatorio', 'error');
+        return;
+    }
+
+    setButtonLoading(btn, true);
+
+    try {
+        const res = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'addAlfajor',
+                data: data,
+                adminSecret: getAdminSecret()
+            })
+        });
+
+        const result = await res.json();
+
+        if (result.success) {
+            showToast(`✅ "${data.name}" creado exitosamente`, 'success');
+
+            data.rowIndex = result.rowIndex;
+            if (result.idGenerado) {
+                data.id = result.idGenerado;
+                adminData.nextAlfajorId = ("0000000" + (parseInt(result.idGenerado, 10) + 1)).slice(-7);
+            }
+            if (!adminData.alfajores) adminData.alfajores = [];
+            adminData.alfajores.push(data);
+            populateLinkSelectors();
+
+            ['name', 'description', 'web'].forEach(f => {
+                const el = document.getElementById(`new-alfajor-${f}`);
+                if (el) el.value = '';
+            });
+
+            const idEl = document.getElementById('new-alfajor-id');
+            if (idEl && adminData.nextAlfajorId) idEl.value = adminData.nextAlfajorId;
+
+        } else {
+            if (/no autorizado/i.test(result.message || '')) clearAdminSecret();
+            showToast(`❌ Error: ${result.message}`, 'error');
+        }
+    } catch (error) {
+        console.error('[Admin] Error creando alfajor:', error);
+        showToast(`❌ Error de conexión: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(btn, false);
+    }
+}
+window.createAlfajor = createAlfajor;
+
+// =============================================
 // GENERADOR DE LINKS
 // =============================================
 let linkSelectorsInitialized = false;
 
 function populateLinkSelectors() {
     const criticoSelect = document.getElementById('link-critico');
+    const critics = (linkType === 'alfajor' ? adminData.alfajorCritics : adminData.critics) || [];
     criticoSelect.innerHTML = '<option value="" disabled selected>Seleccioná un crítico</option>';
-    (adminData.critics || []).forEach(c => {
+    critics.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c;
         opt.textContent = c;
@@ -467,14 +645,15 @@ function populateLinkSelectors() {
     const restoSelect = document.getElementById('link-restaurante');
     const fechaSelect = document.getElementById('link-fecha');
 
-    restoSelect.innerHTML = '<option value="" disabled selected>Selecciona restaurante</option>';
+    restoSelect.innerHTML = `<option value="" disabled selected>${linkType === 'alfajor' ? 'Selecciona alfajor' : 'Selecciona restaurante'}</option>`;
     fechaSelect.innerHTML = '<option value="" disabled selected>Elige fecha</option>';
     fechaSelect.disabled = true;
 
     const uniqueNames = [];
-    (adminData.restaurants || []).forEach(r => {
-        if (!uniqueNames.includes(r.name)) {
-            uniqueNames.push(r.name);
+    const source = linkType === 'alfajor' ? (adminData.alfajores || []) : (adminData.restaurants || []);
+    source.forEach(item => {
+        if (item.name && !uniqueNames.includes(item.name)) {
+            uniqueNames.push(item.name);
         }
     });
 
@@ -487,6 +666,7 @@ function populateLinkSelectors() {
 
     if (!linkSelectorsInitialized) {
         restoSelect.addEventListener('change', () => {
+            if (linkType === 'alfajor') return; // los alfajores no usan fecha
             const selectedName = restoSelect.value;
             fechaSelect.innerHTML = '<option value="" disabled selected>Elige fecha</option>';
 
@@ -511,13 +691,46 @@ function populateLinkSelectors() {
     }
 }
 
+function setLinkType(type) {
+    if (type !== 'alfajor') type = 'restaurant';
+    linkType = type;
+
+    document.querySelectorAll('#link-type-switcher .stats-toggle-btn').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-link-type') === type);
+    });
+
+    const restoLabelText = document.getElementById('link-resto-label-text');
+    const fechaGroup = document.getElementById('link-fecha-group');
+
+    if (type === 'alfajor') {
+        if (restoLabelText) restoLabelText.textContent = 'Alfajor';
+        if (fechaGroup) fechaGroup.style.display = 'none';
+    } else {
+        if (restoLabelText) restoLabelText.textContent = 'Restaurante';
+        if (fechaGroup) fechaGroup.style.display = '';
+    }
+
+    // Ocultar el resultado previo al cambiar de tipo
+    const resultDiv = document.getElementById('link-result');
+    if (resultDiv) resultDiv.classList.remove('show');
+
+    populateLinkSelectors();
+    if (window.lucide) lucide.createIcons();
+}
+window.setLinkType = setLinkType;
+
 async function generateLink() {
     const btn = document.getElementById('btn-generate-link');
     const critico = document.getElementById('link-critico').value;
     const restaurante = document.getElementById('link-restaurante').value;
     const fecha = document.getElementById('link-fecha').value;
 
-    if (!critico || !restaurante || !fecha) {
+    if (linkType === 'alfajor') {
+        if (!critico || !restaurante) {
+            showToast('Seleccioná un crítico y un alfajor', 'error');
+            return;
+        }
+    } else if (!critico || !restaurante || !fecha) {
         showToast('Seleccioná un crítico, un restaurante y una fecha', 'error');
         return;
     }
@@ -529,8 +742,9 @@ async function generateLink() {
             method: 'POST',
             body: JSON.stringify({
                 action: 'generateToken',
+                tipo: linkType,
                 critico: critico,
-                fecha: fecha,
+                fecha: linkType === 'alfajor' ? '' : fecha,
                 restaurante: restaurante,
                 adminSecret: getAdminSecret()
             })

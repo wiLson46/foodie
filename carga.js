@@ -12,6 +12,8 @@ let appToken = null;
 let isSuccess = false;
 
 let currentType = 'presencial';
+let currentFlow = 'restaurant'; // 'restaurant' | 'alfajor'
+let appAlfajorInfo = null;
 
 const criticSelect = document.getElementById('critic-select');
 const dateSelect = document.getElementById('date-select');
@@ -40,6 +42,21 @@ const in1 = document.getElementById('score-1');
 const in2 = document.getElementById('score-2');
 const in3 = document.getElementById('score-3');
 
+// --- Alfajor ---
+const restaurantSection = document.getElementById('restaurant-form-section');
+const alfajorSection = document.getElementById('alfajor-form-section');
+const alfajorCriticInput = document.getElementById('alfajor-critic');
+const alfajorNameInput = document.getElementById('alfajor-name');
+const alfAvg = document.getElementById('alf-avg');
+const alfInputs = {
+    relleno: document.getElementById('alf-relleno'),
+    tapas: document.getElementById('alf-tapas'),
+    armonia: document.getElementById('alf-armonia'),
+    presentacion: document.getElementById('alf-presentacion'),
+    precio: document.getElementById('alf-precio')
+};
+const btnSubmitAlfajor = document.getElementById('submit-btn-alfajor');
+
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
@@ -53,6 +70,15 @@ async function init() {
         input.addEventListener('input', () => {
             validateScoreInput(input);
             updateAverage();
+        });
+        input.addEventListener('blur', () => validateScoreInput(input));
+    });
+
+    Object.values(alfInputs).forEach(input => {
+        if (!input) return;
+        input.addEventListener('input', () => {
+            validateScoreInput(input);
+            updateAverageAlfajor();
         });
         input.addEventListener('blur', () => validateScoreInput(input));
     });
@@ -80,14 +106,26 @@ async function init() {
 
         appData = json;
 
-        populateCritics();
-        populateDates();
-
-        if (appData.tokenInfo) {
+        if (appData.tokenInfo && appData.tokenInfo.type === 'alfajor') {
+            // --- Flujo ALFAJOR ---
+            currentFlow = 'alfajor';
+            appAlfajorInfo = appData.tokenInfo;
+            alfajorCriticInput.value = appData.tokenInfo.critico || '';
+            alfajorNameInput.value = appData.tokenInfo.alfajor || '';
+            alfajorSection.style.display = 'block';
+            statusText.textContent = "Datos sincronizados correctamente.";
+            statusText.style.color = "#2ecc71";
+        } else if (appData.tokenInfo) {
+            // --- Flujo RESTAURANTE ---
+            currentFlow = 'restaurant';
+            populateCritics();
+            populateDates();
             autoSelectFromToken(appData.tokenInfo);
+            restaurantSection.style.display = 'block';
             statusText.textContent = "Datos sincronizados correctamente.";
             statusText.style.color = "#2ecc71";
         } else {
+            // Sin token válido: no mostramos ningún formulario (ambas secciones ocultas).
             btnSubmit.disabled = true;
             if (appToken) {
                 statusText.textContent = "❌ El link no es válido o ya fue usado.";
@@ -235,6 +273,65 @@ function updateAverage() {
     }
 }
 
+function updateAverageAlfajor() {
+    const vals = Object.values(alfInputs).map(i => parseFloat(i.value));
+    const allValid = vals.every(v => !isNaN(v) && v >= 0 && v <= 10);
+    alfAvg.value = allValid ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2) : '';
+}
+
+async function submitAlfajor() {
+    if (!appAlfajorInfo) return;
+
+    let allValid = true;
+    Object.values(alfInputs).forEach(i => {
+        if (!validateScoreInput(i)) allValid = false;
+    });
+
+    if (!allValid) {
+        showResult(false, "Valores inválidos", "Los 5 puntajes deben estar entre 0 y 10.");
+        return;
+    }
+
+    const values = {};
+    ['relleno', 'tapas', 'armonia', 'presentacion', 'precio'].forEach(k => {
+        values[k] = parseFloat(alfInputs[k].value);
+    });
+
+    const payload = {
+        token: appToken,
+        rowIndex: parseInt(appAlfajorInfo.rowIndex),
+        colIndex: parseInt(appAlfajorInfo.colIndex),
+        criticName: appAlfajorInfo.critico,
+        restaurantName: appAlfajorInfo.alfajor,
+        type: 'alfajor',
+        values: values
+    };
+
+    btnSubmitAlfajor.disabled = true;
+    btnSubmitAlfajor.classList.add('loading');
+
+    try {
+        const response = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showResult(true, "¡Reseña cargada!", result.message || "Los datos fueron guardados correctamente.");
+        } else {
+            showResult(false, "Error al guardar", result.message || "Ocurrió un problema al guardar la reseña.");
+        }
+    } catch (error) {
+        showResult(false, "Error de conexión", error.message);
+        console.error('[Carga] Error enviando reseña de alfajor:', error);
+    } finally {
+        btnSubmitAlfajor.disabled = false;
+        btnSubmitAlfajor.classList.remove('loading');
+    }
+}
+
 function populateCritics() {
     criticSelect.innerHTML = '<option value="" disabled selected>Elegí tu nombre</option>';
     appData.critics.forEach(c => {
@@ -318,6 +415,11 @@ restSelect.addEventListener('change', (e) => {
 
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    if (currentFlow === 'alfajor') {
+        await submitAlfajor();
+        return;
+    }
 
     const criticOpt = criticSelect.selectedOptions[0];
     const restOpt = restSelect.selectedOptions[0];

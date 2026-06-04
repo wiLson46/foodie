@@ -330,8 +330,11 @@
         </header>
 
         <main class="view glass-effect carga-container">
-            <form id="review-form">
+            <form id="review-form" novalidate>
                 
+                <!-- ============ RESTAURANTE (3 dims) ============ -->
+                <div id="restaurant-form-section" style="display:none;">
+
                 <!-- Critic Selector -->
                 <div class="form-group">
                     <label for="critic-select" class="form-label">
@@ -415,6 +418,62 @@
                         <div class="spinner"></div>
                     </button>
                 </div>
+                </div><!-- /restaurant-form-section -->
+
+                <!-- ============ ALFAJOR (5 dims) ============ -->
+                <div id="alfajor-form-section" style="display:none;">
+                    <div class="form-group">
+                        <label class="form-label"><i data-lucide="user"></i> Crítico</label>
+                        <input type="text" id="alfajor-critic" class="form-input" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label"><i data-lucide="cookie"></i> Alfajor</label>
+                        <input type="text" id="alfajor-name" class="form-input" disabled>
+                    </div>
+
+                    <div id="alfajor-fields" class="dynamic-fields-container show">
+                        <h3 style="font-family: var(--font-title); margin-bottom: 1.5rem;">
+                            <i data-lucide="star"></i>
+                            Tus Puntajes
+                        </h3>
+
+                        <div class="form-group">
+                            <label for="alf-avg" class="form-label">
+                                <i data-lucide="award"></i>
+                                Promedio (se calcula automáticamente)
+                            </label>
+                            <input type="text" id="alf-avg" class="form-input averages-input" readonly placeholder="Completá los 5 campos de abajo" tabindex="-1">
+                        </div>
+
+                        <div class="score-row-inputs">
+                            <div class="form-group">
+                                <label for="alf-relleno" class="form-label"><i data-lucide="cookie"></i> Relleno</label>
+                                <input type="number" id="alf-relleno" class="form-input" min="0" max="10" step="0.01" placeholder="Ej: 9">
+                            </div>
+                            <div class="form-group">
+                                <label for="alf-tapas" class="form-label"><i data-lucide="layers"></i> Tapas</label>
+                                <input type="number" id="alf-tapas" class="form-input" min="0" max="10" step="0.01" placeholder="Ej: 8.5">
+                            </div>
+                            <div class="form-group">
+                                <label for="alf-armonia" class="form-label"><i data-lucide="heart"></i> Armonía</label>
+                                <input type="number" id="alf-armonia" class="form-input" min="0" max="10" step="0.01" placeholder="Ej: 9">
+                            </div>
+                            <div class="form-group">
+                                <label for="alf-presentacion" class="form-label"><i data-lucide="image"></i> Presentación</label>
+                                <input type="number" id="alf-presentacion" class="form-input" min="0" max="10" step="0.01" placeholder="Ej: 8">
+                            </div>
+                            <div class="form-group">
+                                <label for="alf-precio" class="form-label"><i data-lucide="dollar-sign"></i> Precio</label>
+                                <input type="number" id="alf-precio" class="form-input" min="0" max="10" step="0.01" placeholder="Ej: 7.5">
+                            </div>
+                        </div>
+
+                        <button type="submit" id="submit-btn-alfajor" class="submit-btn">
+                            <span class="btn-text">Cargar Reseña</span>
+                            <div class="spinner"></div>
+                        </button>
+                    </div>
+                </div><!-- /alfajor-form-section -->
 
             </form>
         </main>
