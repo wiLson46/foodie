@@ -35,8 +35,8 @@ function getAlfajoresSheet_() {
   return null;
 }
 
-// Las 5 dimensiones que puntúa un alfajor (orden = columnas de datos antes de RATING).
-var ALFAJOR_SCORE_KEYS = ['relleno', 'tapas', 'armonia', 'presentacion', 'precio'];
+// Las 4 dimensiones que puntúa un alfajor (orden = columnas de datos antes de RATING).
+var ALFAJOR_SCORE_KEYS = ['relleno', 'tapas', 'armonia', 'presentacion'];
 
 var PUBLIC_CACHE_KEY = 'publicData_v1';
 var PUBLIC_CACHE_TTL = 300; // 5 min
@@ -209,7 +209,7 @@ function validateScores(vals) {
 }
 
 /**
- * Valida los 5 puntajes (0-10) de un alfajor.
+ * Valida los 4 puntajes (0-10) de un alfajor.
  */
 function validateScoresAlfajor(vals) {
   if (!vals) throw new Error('Faltan puntajes.');
@@ -467,14 +467,14 @@ function getAlfajorTokenData_(token) {
     if ((h === 'name' || h === 'nombre') && nameCol === -1) nameCol = i;
   }
 
-  // colIndex del crítico: header que termina en " rating", datos = RATING(1-based) - 5
+  // colIndex del crítico: header que termina en " rating", datos = RATING(1-based) - 4
   var colIndex = null;
   for (var c = 0; c < headers.length; c++) {
     var hc = String(headers[c]).toLowerCase().trim();
     if (hc.endsWith(' rating')) {
       var critName = hc.replace(/ rating$/i, '').trim();
       if (critName.toLowerCase() === critico.toLowerCase()) {
-        colIndex = (c + 1) - 5;
+        colIndex = (c + 1) - 4;
         break;
       }
     }
@@ -535,14 +535,14 @@ function handleReviewSubmit(postData) {
   // El tipo lo manda el servidor (fila de links), no el cliente.
   var linkTipo = String(found.row[6] || '').toLowerCase().trim();
 
-  // --- Alfajor: escribe las 5 dimensiones en la hoja de alfajores ---
+  // --- Alfajor: escribe las 4 dimensiones en la hoja de alfajores ---
   if (linkTipo === 'alfajor') {
     validateScoresAlfajor(vals);
     var aSheet = getAlfajoresSheet_();
     if (!aSheet) throw new Error("No se encontró la hoja de alfajores.");
 
     var alfaValues = ALFAJOR_SCORE_KEYS.map(function (k) { return sanitizeCellValue(vals[k]); });
-    aSheet.getRange(rowIndex, colIndex, 1, 5).setValues([alfaValues]);
+    aSheet.getRange(rowIndex, colIndex, 1, 4).setValues([alfaValues]);
 
     linksSheet.getRange(found.rowIndex, 5).setValue('usado');
 

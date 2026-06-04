@@ -235,7 +235,7 @@ async function fetchData() {
 
 /**
  * Carga (lazy, una sola vez) el ranking de alfajores desde su propio CSV.
- * Mapea las 5 dimensiones (relleno, tapas, armonía, presentación, precio) por crítico.
+ * Mapea las 4 dimensiones (relleno, tapas, armonía, presentación) por crítico.
  */
 async function fetchAlfajores() {
     if (alfajoresLoaded) return;
@@ -264,8 +264,7 @@ async function fetchAlfajores() {
                                 relleno: r[`${critic} relleno`],
                                 tapas: r[`${critic} tapas`],
                                 armonia: r[`${critic} armonia`],
-                                presentacion: r[`${critic} presentacion`],
-                                precio: r[`${critic} precio`]
+                                presentacion: r[`${critic} presentacion`]
                             };
                         }
                     });
@@ -795,7 +794,6 @@ function generateAlfajorScoresTableHTML(res) {
                 <td class="col-score">${escapeHtml(c.tapas || '-')}</td>
                 <td class="col-score">${escapeHtml(c.armonia || '-')}</td>
                 <td class="col-score">${escapeHtml(c.presentacion || '-')}</td>
-                <td class="col-score">${escapeHtml(c.precio || '-')}</td>
             </tr>
         `;
     });
@@ -810,7 +808,6 @@ function generateAlfajorScoresTableHTML(res) {
                     <th><i data-lucide="layers" class="header-icon" aria-hidden="true"></i> Tapas</th>
                     <th><i data-lucide="heart" class="header-icon" aria-hidden="true"></i> Armonía</th>
                     <th><i data-lucide="image" class="header-icon" aria-hidden="true"></i> Present.</th>
-                    <th><i data-lucide="dollar-sign" class="header-icon" aria-hidden="true"></i> Precio</th>
                 </tr>
             </thead>
             <tbody>

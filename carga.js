@@ -52,8 +52,7 @@ const alfInputs = {
     relleno: document.getElementById('alf-relleno'),
     tapas: document.getElementById('alf-tapas'),
     armonia: document.getElementById('alf-armonia'),
-    presentacion: document.getElementById('alf-presentacion'),
-    precio: document.getElementById('alf-precio')
+    presentacion: document.getElementById('alf-presentacion')
 };
 const btnSubmitAlfajor = document.getElementById('submit-btn-alfajor');
 
@@ -288,12 +287,12 @@ async function submitAlfajor() {
     });
 
     if (!allValid) {
-        showResult(false, "Valores inválidos", "Los 5 puntajes deben estar entre 0 y 10.");
+        showResult(false, "Valores inválidos", "Los 4 puntajes deben estar entre 0 y 10.");
         return;
     }
 
     const values = {};
-    ['relleno', 'tapas', 'armonia', 'presentacion', 'precio'].forEach(k => {
+    ['relleno', 'tapas', 'armonia', 'presentacion'].forEach(k => {
         values[k] = parseFloat(alfInputs[k].value);
     });
 
