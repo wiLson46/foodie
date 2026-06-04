@@ -3,8 +3,8 @@
  * Cargar antes de main.js / admin.js / carga.js en cada HTML.
  */
 window.COMER_CONFIG = {
-    SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwQpS19Mz9srg2OQHIN-Vl5wVG87thlsjypvBP4Q2tt-FMflzOYd7ayaHPtrSvRobo-/exec',
-    TRACKING_URL: 'https://script.google.com/macros/s/AKfycbxT0G-CwgaZgAZsKXdNgrMm5Bffl77ItglK_CtJyVYX1_OWeeI7Ze0eue1eO4fsujFw/exec',
+    SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbx-bJYKWf-CzNnVxI334oqe10P7Ibeh-vK1yg4yZvkv31RRfuH4plXzKRmY9ViydDAM/exec',
+    TRACKING_URL: 'https://script.google.com/macros/s/AKfycbzliZeD8VmFGgCmvUMsm7MmwNDkvsIdsbF6RfY550eEW2Ls9VLHb1CnfljO_hAxaDt1/exec',
     MAIN_DATA_SHEET: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv',
     VOTES_SHEET: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv&gid=1795075061',
 
