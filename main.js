@@ -751,17 +751,17 @@ function generateScoresTableHTML(res) {
     });
 
     return `
-        <table class="scores-table">
+        <table class="scores-table scores-table-resto">
             <thead>
                 <tr class="score-header-row">
                     <th style="text-align:left;">Crítico</th>
                     <th>Prom.</th>
-                    <th><i data-lucide="utensils" class="header-icon" aria-hidden="true"></i> Comida</th>
+                    <th aria-label="Comida"><i data-lucide="utensils" class="header-icon" aria-hidden="true"></i><span class="header-label"> Comida</span></th>
                     ${isDelivery ?
-            `<th><i data-lucide="box" class="header-icon" aria-hidden="true"></i> Presentación</th>
-                     <th><i data-lucide="dollar-sign" class="header-icon" aria-hidden="true"></i> Precio</th>` :
-            `<th><i data-lucide="armchair" class="header-icon" aria-hidden="true"></i> Lugar</th>
-                     <th><i data-lucide="thumbs-up" class="header-icon" aria-hidden="true"></i> Atención</th>`
+            `<th aria-label="Presentación"><i data-lucide="box" class="header-icon" aria-hidden="true"></i><span class="header-label"> Presentación</span></th>
+                     <th aria-label="Precio"><i data-lucide="dollar-sign" class="header-icon" aria-hidden="true"></i><span class="header-label"> Precio</span></th>` :
+            `<th aria-label="Lugar"><i data-lucide="armchair" class="header-icon" aria-hidden="true"></i><span class="header-label"> Lugar</span></th>
+                     <th aria-label="Atención"><i data-lucide="thumbs-up" class="header-icon" aria-hidden="true"></i><span class="header-label"> Atención</span></th>`
         }
                 </tr>
             </thead>
@@ -769,6 +769,15 @@ function generateScoresTableHTML(res) {
                 ${rowsHtml}
             </tbody>
         </table>
+        <div class="scores-legend" aria-hidden="true">
+            <span><i data-lucide="utensils" class="legend-icon"></i> Comida</span>
+            ${isDelivery ?
+            `<span><i data-lucide="box" class="legend-icon"></i> Presentación</span>
+             <span><i data-lucide="dollar-sign" class="legend-icon"></i> Precio</span>` :
+            `<span><i data-lucide="armchair" class="legend-icon"></i> Lugar</span>
+             <span><i data-lucide="thumbs-up" class="legend-icon"></i> Atención</span>`
+        }
+        </div>
     `;
 }
 
@@ -799,21 +808,27 @@ function generateAlfajorScoresTableHTML(res) {
     });
 
     return `
-        <table class="scores-table">
+        <table class="scores-table scores-table-alfajor">
             <thead>
                 <tr class="score-header-row">
                     <th style="text-align:left;">Crítico</th>
                     <th>Prom.</th>
-                    <th><i data-lucide="cookie" class="header-icon" aria-hidden="true"></i> Relleno</th>
-                    <th><i data-lucide="layers" class="header-icon" aria-hidden="true"></i> Tapas</th>
-                    <th><i data-lucide="heart" class="header-icon" aria-hidden="true"></i> Armonía</th>
-                    <th><i data-lucide="image" class="header-icon" aria-hidden="true"></i> Present.</th>
+                    <th aria-label="Relleno"><i data-lucide="cookie" class="header-icon" aria-hidden="true"></i><span class="header-label"> Relleno</span></th>
+                    <th aria-label="Tapas"><i data-lucide="layers" class="header-icon" aria-hidden="true"></i><span class="header-label"> Tapas</span></th>
+                    <th aria-label="Armonía"><i data-lucide="heart" class="header-icon" aria-hidden="true"></i><span class="header-label"> Armonía</span></th>
+                    <th aria-label="Presentación"><i data-lucide="image" class="header-icon" aria-hidden="true"></i><span class="header-label"> Present.</span></th>
                 </tr>
             </thead>
             <tbody>
                 ${rowsHtml}
             </tbody>
         </table>
+        <div class="scores-legend" aria-hidden="true">
+            <span><i data-lucide="cookie" class="legend-icon"></i> Relleno</span>
+            <span><i data-lucide="layers" class="legend-icon"></i> Tapas</span>
+            <span><i data-lucide="heart" class="legend-icon"></i> Armonía</span>
+            <span><i data-lucide="image" class="legend-icon"></i> Present.</span>
+        </div>
     `;
 }
 
