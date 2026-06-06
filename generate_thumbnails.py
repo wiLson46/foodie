@@ -16,6 +16,16 @@ import os
 import sys
 from PIL import Image
 
+# En Windows la consola usa por defecto una codificación legacy (cp1252) y los
+# emojis/flechas de los mensajes de abajo rompen con UnicodeEncodeError apenas se
+# imprime el primero. Forzamos UTF-8 en la salida para que el script corra sin
+# parámetros extra (antes había que invocarlo con `python -X utf8` o PYTHONUTF8=1).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding='utf-8')
+    except (AttributeError, ValueError):
+        pass
+
 # Config
 SOURCE_DIR = './fotos'
 THUMB_DIR = './fotos_thumb'
