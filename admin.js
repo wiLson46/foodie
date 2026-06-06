@@ -54,16 +54,23 @@ async function initAdmin() {
         return;
     }
 
+    // Los endpoints GET admin/getStats ahora requieren el secret (igual que los POST).
+    const secretQS = '&adminSecret=' + encodeURIComponent(getAdminSecret());
+
     try {
         // Carga en paralelo: datos admin + stats
         const [adminRes, statsRes] = await Promise.allSettled([
-            fetch(SCRIPT_URL + '?action=admin').then(r => r.json()),
-            fetch(SCRIPT_URL + '?action=getStats').then(r => r.json())
+            fetch(SCRIPT_URL + '?action=admin' + secretQS).then(r => r.json()),
+            fetch(SCRIPT_URL + '?action=getStats' + secretQS).then(r => r.json())
         ]);
 
         if (adminRes.status !== 'fulfilled') throw adminRes.reason || new Error('Error cargando datos');
         const json = adminRes.value;
-        if (json.error) throw new Error(json.error);
+        if (json.error) {
+            // Secret inválido: lo limpiamos para que el reload vuelva a pedirlo.
+            if (/no autorizado/i.test(json.error)) clearAdminSecret();
+            throw new Error(json.error);
+        }
 
         adminData = json;
 
@@ -867,9 +874,15 @@ function setupSmartPaste() {
         return (t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'));
     };
 
+    const MAX_PASTE_LEN = 20000; // evita freeze del navegador con pegados gigantes
+
     pasteArea.addEventListener('input', (e) => {
         const val = e.target.value.trim();
         if (!val || val.length < 10) return;
+        if (val.length > MAX_PASTE_LEN) {
+            showToast('❌ El texto pegado es demasiado largo', 'error');
+            return;
+        }
 
         let data;
         try {

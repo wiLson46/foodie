@@ -70,7 +70,7 @@
 
         .form-select:focus, .form-input:focus {
             border-color: var(--gold);
-            box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.1);
+            box-shadow: 0 0 0 3px rgba(255, 145, 0, 0.15);
         }
 
         .form-select:disabled, .form-input:disabled {
@@ -382,7 +382,7 @@
                             <i data-lucide="award"></i>
                             Promedio (se calcula automáticamente)
                         </label>
-                        <input type="text" id="score-avg" class="form-input averages-input" readonly placeholder="Completá los 3 campos de abajo" tabindex="-1">
+                        <input type="text" id="score-avg" class="form-input averages-input" readonly placeholder="Completá los 3 campos de abajo" tabindex="-1" aria-label="Promedio calculado automáticamente">
                     </div>
 
                     <div class="score-row-inputs">
@@ -442,7 +442,7 @@
                                 <i data-lucide="award"></i>
                                 Promedio (se calcula automáticamente)
                             </label>
-                            <input type="text" id="alf-avg" class="form-input averages-input" readonly placeholder="Completá los 4 campos de abajo" tabindex="-1">
+                            <input type="text" id="alf-avg" class="form-input averages-input" readonly placeholder="Completá los 4 campos de abajo" tabindex="-1" aria-label="Promedio calculado automáticamente">
                         </div>
 
                         <div class="score-row-inputs">
@@ -533,7 +533,7 @@
             }
         });
     </script>
-    <script src="config.js?v=1.6"></script>
+    <script src="config.js?v=1.7"></script>
     <script src="carga.js?v=1.7"></script>
 </body>
 

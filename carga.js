@@ -415,6 +415,9 @@ restSelect.addEventListener('change', (e) => {
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
 
+    // Evita envíos duplicados si se dispara el submit dos veces seguidas.
+    if (btnSubmit.disabled) return;
+
     if (currentFlow === 'alfajor') {
         await submitAlfajor();
         return;

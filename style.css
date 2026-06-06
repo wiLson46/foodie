@@ -182,6 +182,10 @@ input:checked+.slider:before {
     border-radius: 50%;
 }
 
+.dark-mode .slider {
+    background-color: #555;
+}
+
 /* ========== HEADER ========== */
 
 .header {
@@ -657,6 +661,11 @@ input:checked+.slider:before {
     .top-1::after, .top-2::after, .top-3::after {
         animation: none;
     }
+    .toast,
+    .gallery-shimmer,
+    .gallery-img-wrapper.loading::before {
+        animation: none !important;
+    }
 }
 
 @keyframes glass-shimmer {
@@ -978,7 +987,7 @@ input:checked+.slider:before {
 }
 
 .dark-mode .info-item.inactive {
-    color: #444 !important;
+    color: #888 !important;
 }
 
 /* ========== SUB TABS ========== */

@@ -115,6 +115,16 @@ function escapeHtml(str) {
         .replace(/'/g, '&#039;');
 }
 
+/**
+ * Devuelve la URL solo si su protocolo es seguro (http/https) para usar en href.
+ * Bloquea javascript:, data:, etc. (XSS si el CSV fuera comprometido). '' si no es válida.
+ */
+function safeHref(url) {
+    if (!url) return '';
+    const s = String(url).trim();
+    return /^https?:\/\//i.test(s) ? s : '';
+}
+
 function normalizeData(data) {
     const filtered = data.filter(row => Object.values(row).some(v => String(v).trim() !== ""));
     return filtered.map(row => {
@@ -958,7 +968,8 @@ function showDetail(res, updateUrl = true) {
     const safeDate = escapeHtml(visitDate);
     const safeAddress = escapeHtml(address);
     const safePhone = escapeHtml(phone);
-    const safeMapLink = escapeHtml(mapLink);
+    const mapHref = safeHref(mapLink);
+    const safeMapLink = escapeHtml(mapHref);
     const safeInstagramLink = escapeHtml(instagramLink);
     const safeOrderedBy = escapeHtml(orderedBy);
     const safePublic = escapeHtml(publicScore);
@@ -994,7 +1005,7 @@ function showDetail(res, updateUrl = true) {
                     <span>Ver el IG del local</span>
                 </div>`}
 
-            ${(mapLink && res.presencialDelivery === 'P') ?
+            ${(mapHref && res.presencialDelivery === 'P') ?
                 `<a href="${safeMapLink}" target="_blank" rel="noopener" class="info-item active link">
                     <i data-lucide="map" aria-hidden="true"></i>
                     <span>Ir al local</span>
@@ -1054,16 +1065,16 @@ function showDetail(res, updateUrl = true) {
         </div>
 
         <div class="detail-tabs-container">
-            <div class="sub-tabs">
-                <button class="sub-tab-btn active" type="button" data-subtab="fotos">Fotos</button>
-                <button class="sub-tab-btn" type="button" data-subtab="puntajes">Puntajes</button>
+            <div class="sub-tabs" role="tablist">
+                <button class="sub-tab-btn active" type="button" data-subtab="fotos" role="tab" id="tab-fotos" aria-selected="true" aria-controls="fotos-content">Fotos</button>
+                <button class="sub-tab-btn" type="button" data-subtab="puntajes" role="tab" id="tab-puntajes" aria-selected="false" aria-controls="puntajes-content">Puntajes</button>
             </div>
 
-            <div id="fotos-content" class="sub-tab-content">
+            <div id="fotos-content" class="sub-tab-content" role="tabpanel" aria-labelledby="tab-fotos">
                 ${generatePhotosGalleryHTML(photosString)}
             </div>
 
-            <div id="puntajes-content" class="sub-tab-content hidden">
+            <div id="puntajes-content" class="sub-tab-content hidden" role="tabpanel" aria-labelledby="tab-puntajes">
                 <div class="scores-table-container">
                     ${isAlf ? generateAlfajorScoresTableHTML(res) : generateScoresTableHTML(res)}
                 </div>
@@ -1103,8 +1114,12 @@ function setupSubTabs() {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const target = btn.getAttribute('data-subtab');
-            document.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.sub-tab-btn').forEach(b => {
+                b.classList.remove('active');
+                b.setAttribute('aria-selected', 'false');
+            });
             btn.classList.add('active');
+            btn.setAttribute('aria-selected', 'true');
             document.querySelectorAll('.sub-tab-content').forEach(content => content.classList.add('hidden'));
             document.getElementById(`${target}-content`).classList.remove('hidden');
         });
@@ -1238,7 +1253,11 @@ function setupMainTabs() {
                     const iframe = mapContainer.querySelector('iframe');
                     const loader = mapContainer.querySelector('#map-loader');
                     if (iframe && loader) {
-                        iframe.addEventListener('load', () => loader.remove(), { once: true });
+                        const removeLoader = () => loader.remove();
+                        iframe.addEventListener('load', removeLoader, { once: true });
+                        // Fallback: si el iframe nunca dispara 'load' (CDN caído), no dejamos
+                        // el "Cargando mapa…" para siempre.
+                        setTimeout(removeLoader, 8000);
                     }
                     mapLoaded = true;
                 }
@@ -1418,6 +1437,9 @@ function setupModeSwitcher() {
             const newMode = btn.getAttribute('data-mode');
             if (newMode === currentMode) return;
 
+            // Evita doble-click / race de datos mientras se carga el modo nuevo.
+            modeBtns.forEach(b => { b.disabled = true; });
+
             currentMode = newMode;
             currentLocation = 'all';
 
@@ -1441,8 +1463,12 @@ function setupModeSwitcher() {
             // Skeleton mientras carga el CSV de alfajores la primera vez
             if (currentMode === 'alfajores' && !alfajoresLoaded) renderSkeleton();
 
-            await filterByMode();
-            syncFiltersToUrl();
+            try {
+                await filterByMode();
+                syncFiltersToUrl();
+            } finally {
+                modeBtns.forEach(b => { b.disabled = false; });
+            }
         });
     });
 }

@@ -38,6 +38,11 @@ function getAlfajoresSheet_() {
 // Las 4 dimensiones que puntúa un alfajor (orden = columnas de datos antes de RATING).
 var ALFAJOR_SCORE_KEYS = ['relleno', 'tapas', 'armonia', 'presentacion'];
 
+// Límite de la descripción. Tope práctico apenas por debajo del máximo de Google
+// Sheets (50.000 chars por celda) para no romper la escritura; a efectos de uso
+// es "sin límite". Aplica a restaurantes y alfajores.
+var MAX_DESCRIPTION_LEN = 45000;
+
 var PUBLIC_CACHE_KEY = 'publicData_v1';
 var PUBLIC_CACHE_TTL = 300; // 5 min
 
@@ -61,10 +66,12 @@ function doGet(e) {
     var token = params.token || null;
 
     if (action === 'admin') {
+      requireAdminSecret(params);
       return sendJson(getAdminData());
     }
 
     if (action === 'getStats') {
+      requireAdminSecret(params);
       return sendJson(getStats());
     }
 
@@ -125,9 +132,9 @@ function doPost(e) {
 
 /**
  * Valida el secret admin. Lanza error si no matchea.
+ * Sirve tanto para POST (postData.adminSecret) como para GET (params.adminSecret).
  *
  * Para producción: configurar `ADMIN_SECRET` en Project Settings > Script Properties.
- * Si no está configurado, se usa el fallback hardcodeado.
  */
 function requireAdminSecret(postData) {
   var expected = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET');
@@ -188,11 +195,14 @@ function validateRestaurant(data) {
   if (!data) throw new Error('Datos vacíos');
   if (!data.name || String(data.name).trim().length === 0) throw new Error('El nombre es obligatorio.');
   if (String(data.name).length > 200) throw new Error('Nombre demasiado largo.');
-  ['location', 'description', 'direccion', 'telefono', 'instagram', 'pedidoPor'].forEach(function (f) {
+  ['location', 'direccion', 'telefono', 'instagram', 'pedidoPor'].forEach(function (f) {
     if (data[f] && String(data[f]).length > 1000) {
       throw new Error('Campo demasiado largo: ' + f);
     }
   });
+  if (data.description && String(data.description).length > MAX_DESCRIPTION_LEN) {
+    throw new Error('Descripción demasiado larga.');
+  }
   if (data.linkMapa && String(data.linkMapa).length > 2000) throw new Error('linkMapa demasiado largo.');
   if (data.fecha && String(data.fecha).length > 30) throw new Error('Fecha inválida.');
 }
@@ -226,7 +236,7 @@ function validateAlfajor(data) {
   if (!data) throw new Error('Datos vacíos');
   if (!data.name || String(data.name).trim().length === 0) throw new Error('El nombre es obligatorio.');
   if (String(data.name).length > 200) throw new Error('Nombre demasiado largo.');
-  if (data.description && String(data.description).length > 1000) throw new Error('Descripción demasiado larga.');
+  if (data.description && String(data.description).length > MAX_DESCRIPTION_LEN) throw new Error('Descripción demasiado larga.');
   if (data.web && String(data.web).length > 2000) throw new Error('Web demasiado larga.');
 }
 
@@ -342,6 +352,8 @@ function getPublicData(token) {
       var criticName = h.replace(/ rating$/i, '').trim();
       criticName = criticName.charAt(0).toUpperCase() + criticName.slice(1);
       var ratingCol1Based = i + 1;
+      // Restaurante: cada crítico ocupa 6 columnas [comida, lugar, atencion,
+      // presentacion, precio, RATING]. La primera columna de datos = RATING - 5.
       var dataStartCol = ratingCol1Based - 5;
       critics.push({ name: criticName, colIndex: dataStartCol });
     }
@@ -474,6 +486,8 @@ function getAlfajorTokenData_(token) {
     if (hc.endsWith(' rating')) {
       var critName = hc.replace(/ rating$/i, '').trim();
       if (critName.toLowerCase() === critico.toLowerCase()) {
+        // Alfajor: cada crítico ocupa 5 columnas [relleno, tapas, armonia,
+        // presentacion, RATING]. La primera columna de datos = RATING - 4.
         colIndex = (c + 1) - 4;
         break;
       }
@@ -543,6 +557,17 @@ function handleReviewSubmit(postData) {
 
     var alfaValues = ALFAJOR_SCORE_KEYS.map(function (k) { return sanitizeCellValue(vals[k]); });
     aSheet.getRange(rowIndex, colIndex, 1, 4).setValues([alfaValues]);
+
+    // Sella la fecha del día en la columna "fecha" del alfajor (texto DD/MM/YYYY,
+    // igual que los restaurantes). Se busca por header para no depender de la posición.
+    var aHeaders = aSheet.getRange(1, 1, 1, aSheet.getLastColumn()).getValues()[0];
+    var fechaColIdx = buildColumnMap(aHeaders)['fecha'];
+    if (fechaColIdx !== undefined && fechaColIdx !== null) {
+      var hoy = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'dd/MM/yyyy');
+      var fechaCell = aSheet.getRange(rowIndex, fechaColIdx + 1);
+      fechaCell.setNumberFormat('@');
+      fechaCell.setValue(hoy);
+    }
 
     linksSheet.getRange(found.rowIndex, 5).setValue('usado');
 
@@ -809,17 +834,23 @@ function addRestaurant(postData) {
   var insertRowIndex = sheet.getLastRow() + 1;
   var idGenerado = 1;
 
+  // Solo leemos hasta la última fila con datos (getLastRow), no toda la hoja
+  // (getMaxRows incluye ~1M de filas vacías y vuelve la operación lentísima).
+  var numDataRows = sheet.getLastRow() - 1;
+
   if (idColIdx !== undefined && idColIdx !== null) {
-      var idValues = sheet.getRange(2, idColIdx + 1, sheet.getMaxRows() - 1, 1).getValues();
       var maxId = 0;
       var lastPopulatedIdx = -1;
 
-      for (var i = 0; i < idValues.length; i++) {
-        var strVal = String(idValues[i][0]).trim();
-        if (strVal !== '') {
-           lastPopulatedIdx = i;
-           var pId = parseInt(strVal, 10);
-           if (!isNaN(pId) && pId > maxId) maxId = pId;
+      if (numDataRows > 0) {
+        var idValues = sheet.getRange(2, idColIdx + 1, numDataRows, 1).getValues();
+        for (var i = 0; i < idValues.length; i++) {
+          var strVal = String(idValues[i][0]).trim();
+          if (strVal !== '') {
+             lastPopulatedIdx = i;
+             var pId = parseInt(strVal, 10);
+             if (!isNaN(pId) && pId > maxId) maxId = pId;
+          }
         }
       }
 
@@ -828,8 +859,8 @@ function addRestaurant(postData) {
       datos['id'] = idGenerado;
   } else {
       var nameColIdx = colMap['name'] !== undefined ? colMap['name'] : colMap['nombre'];
-      if (nameColIdx !== undefined && nameColIdx !== null) {
-          var nameValues = sheet.getRange(2, nameColIdx + 1, sheet.getMaxRows() - 1, 1).getValues();
+      if (nameColIdx !== undefined && nameColIdx !== null && numDataRows > 0) {
+          var nameValues = sheet.getRange(2, nameColIdx + 1, numDataRows, 1).getValues();
           var lastIdx = -1;
           for (var i = 0; i < nameValues.length; i++) {
               if (String(nameValues[i][0]).trim() !== '') {
@@ -985,16 +1016,21 @@ function addAlfajor(postData) {
   var insertRowIndex = sheet.getLastRow() + 1;
   var idGenerado = ("0000000" + 1).slice(-7);
 
+  // Acotamos la lectura a las filas con datos (getLastRow) en vez de toda la hoja.
+  var numDataRows = sheet.getLastRow() - 1;
+
   if (idColIdx !== undefined && idColIdx !== null) {
-    var idValues = sheet.getRange(2, idColIdx + 1, sheet.getMaxRows() - 1, 1).getValues();
     var maxId = 0;
     var lastPopulatedIdx = -1;
-    for (var i = 0; i < idValues.length; i++) {
-      var strVal = String(idValues[i][0]).trim();
-      if (strVal !== '') {
-        lastPopulatedIdx = i;
-        var pId = parseInt(strVal, 10);
-        if (!isNaN(pId) && pId > maxId) maxId = pId;
+    if (numDataRows > 0) {
+      var idValues = sheet.getRange(2, idColIdx + 1, numDataRows, 1).getValues();
+      for (var i = 0; i < idValues.length; i++) {
+        var strVal = String(idValues[i][0]).trim();
+        if (strVal !== '') {
+          lastPopulatedIdx = i;
+          var pId = parseInt(strVal, 10);
+          if (!isNaN(pId) && pId > maxId) maxId = pId;
+        }
       }
     }
     insertRowIndex = lastPopulatedIdx + 3;
@@ -1002,8 +1038,8 @@ function addAlfajor(postData) {
     datos['id'] = idGenerado;
   } else {
     var nameColIdx = colMap['name'] !== undefined ? colMap['name'] : colMap['nombre'];
-    if (nameColIdx !== undefined && nameColIdx !== null) {
-      var nameValues = sheet.getRange(2, nameColIdx + 1, sheet.getMaxRows() - 1, 1).getValues();
+    if (nameColIdx !== undefined && nameColIdx !== null && numDataRows > 0) {
+      var nameValues = sheet.getRange(2, nameColIdx + 1, numDataRows, 1).getValues();
       var lastIdx = -1;
       for (var j = 0; j < nameValues.length; j++) {
         if (String(nameValues[j][0]).trim() !== '') lastIdx = j;
