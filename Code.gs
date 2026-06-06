@@ -939,8 +939,14 @@ function generateToken(postData) {
   var tipo = String(postData.tipo || 'restaurant').toLowerCase().trim();
   if (tipo !== 'alfajor') tipo = 'restaurant';
 
-  // Los alfajores no usan fecha (1 fila por producto).
-  var fecha = tipo === 'alfajor' ? '' : postData.fecha;
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Restaurante: fecha de la visita (la elige el admin). Alfajor: no tiene fecha de
+  // visita, así que sellamos la fecha del día en que se genera el link (columna C),
+  // en el mismo formato DD/MM/YYYY que usan los restaurantes.
+  var fecha = tipo === 'alfajor'
+    ? Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'dd/MM/yyyy')
+    : postData.fecha;
 
   if (!critico || !restaurante) {
     throw new Error("Faltan datos: crítico y " + (tipo === 'alfajor' ? 'alfajor' : 'restaurante') + " son obligatorios.");
@@ -948,8 +954,6 @@ function generateToken(postData) {
   if (tipo === 'restaurant' && !fecha) {
     throw new Error("Falta la fecha.");
   }
-
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
 
   var linksSheet = ss.getSheetByName(LINKS_SHEET_NAME);
   if (!linksSheet) {
