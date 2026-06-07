@@ -112,6 +112,7 @@ async function initAdmin() {
         renderRestaurants();
         populateLinkSelectors();
         setupSmartPaste();
+        setupNewPhotoUploaders();
 
         adminLoader.style.display = 'none';
         adminContent.style.display = 'block';
@@ -323,6 +324,7 @@ function createRestaurantCard(r, globalIdx) {
                 <label class="admin-label" for="edit-pedidoPor-${globalIdx}"><i data-lucide="shopping-bag"></i> Pedido por</label>
                 <input type="text" class="admin-input" id="edit-pedidoPor-${globalIdx}" value="${escapeHtml(r.pedidoPor || '')}">
             </div>
+            <div class="admin-form-group field-full">${photoUploaderHTML('edit-resto-' + globalIdx, r.fotos)}</div>
         </div>
 
         <button type="button" class="admin-btn btn-save" id="btn-save-${globalIdx}" onclick="saveRestaurant(${globalIdx})">
@@ -376,6 +378,8 @@ async function saveRestaurant(idx) {
     setButtonLoading(btn, true);
 
     try {
+        data.fotos = await collectFotos('edit-resto-' + idx, data.fecha);
+
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
@@ -440,6 +444,8 @@ async function createRestaurant() {
     setButtonLoading(btn, true);
 
     try {
+        data.fotos = await collectFotos('new-resto', data.fecha);
+
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
@@ -464,6 +470,7 @@ async function createRestaurant() {
             populateLinkSelectors();
 
             clearNewForm();
+            clearPhotoScope('new-resto');
 
             const newIdInput = document.getElementById('new-id');
             if (newIdInput && adminData.nextId) {
@@ -523,6 +530,7 @@ function createAlfajorCard(a, idx) {
                 <label class="admin-label" for="alf-edit-web-${idx}"><i data-lucide="globe"></i> Web</label>
                 <input type="text" class="admin-input" id="alf-edit-web-${idx}" value="${escapeHtml(a.web || '')}">
             </div>
+            <div class="admin-form-group field-full">${photoUploaderHTML('edit-alf-' + idx, a.fotos)}</div>
         </div>
 
         <button type="button" class="admin-btn btn-save" id="alf-btn-save-${idx}" onclick="saveAlfajor(${idx})">
@@ -555,6 +563,8 @@ async function saveAlfajor(idx) {
     setButtonLoading(btn, true);
 
     try {
+        data.fotos = await collectFotos('edit-alf-' + idx, '');
+
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
@@ -606,6 +616,8 @@ async function createAlfajor() {
     setButtonLoading(btn, true);
 
     try {
+        data.fotos = await collectFotos('new-alfajor', '');
+
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
@@ -633,6 +645,7 @@ async function createAlfajor() {
                 const el = document.getElementById(`new-alfajor-${f}`);
                 if (el) el.value = '';
             });
+            clearPhotoScope('new-alfajor');
 
             const idEl = document.getElementById('new-alfajor-id');
             if (idEl && adminData.nextAlfajorId) idEl.value = adminData.nextAlfajorId;
@@ -873,6 +886,235 @@ function escapeHtml(str) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
+// =============================================
+// FOTOS: carga desde el navegador (Canvas thumb + commit a GitHub)
+// =============================================
+const THUMB_MAX_WIDTH = 400;       // igual que generate_thumbnails.py
+const THUMB_JPEG_QUALITY = 0.6;    // ≈ quality=60
+
+// Estado por "scope": new-resto | new-alfajor | edit-resto-<idx> | edit-alf-<idx>
+// { existing: [paths], pending: [{ id, file, previewUrl }] }
+const photoState = {};
+
+function parseFotosList(str) {
+    if (!str) return [];
+    return String(str).split(';').map(s => s.trim()).filter(Boolean);
+}
+
+// Deriva la ruta del thumbnail desde la del original (igual que getThumbnailUrl en main.js).
+function getAdminThumb(originalUrl) {
+    if (!originalUrl) return originalUrl;
+    const thumb = originalUrl.replace(/\/fotos\//, '/fotos_thumb/').replace(/\bfotos\//, 'fotos_thumb/');
+    return thumb.replace(/\.(jpeg|jpg|png|webp)$/i, '.jpg');
+}
+
+function initPhotoScope(scope, existingStr) {
+    photoState[scope] = { existing: parseFotosList(existingStr), pending: [] };
+    return photoState[scope];
+}
+
+function clearPhotoScope(scope) {
+    const st = photoState[scope];
+    if (st) st.pending.forEach(p => { try { URL.revokeObjectURL(p.previewUrl); } catch (e) {} });
+    photoState[scope] = { existing: [], pending: [] };
+    renderPhotoGrid(scope);
+}
+
+function existingChipHTML(scope, i, path) {
+    return `<div class="photo-chip">
+        <img src="${escapeHtml(getAdminThumb(path))}" alt="" loading="lazy" onerror="this.style.opacity=0.2">
+        <button type="button" class="photo-chip-x" title="Quitar" onclick="removeExistingPhotoAt('${scope}', ${i})">×</button>
+    </div>`;
+}
+
+function pendingChipHTML(scope, p) {
+    return `<div class="photo-chip photo-chip-new">
+        <img src="${p.previewUrl}" alt="">
+        <button type="button" class="photo-chip-x" title="Quitar" onclick="removePendingPhoto('${scope}', '${p.id}')">×</button>
+    </div>`;
+}
+
+function gridInnerHTML(scope) {
+    const st = photoState[scope] || { existing: [], pending: [] };
+    const chips = st.existing.map((p, i) => existingChipHTML(scope, i, p)).join('') +
+        st.pending.map(p => pendingChipHTML(scope, p)).join('');
+    return chips || '<span class="photo-empty">Sin fotos aún</span>';
+}
+
+function renderPhotoGrid(scope) {
+    const grid = document.getElementById(`photo-grid-${scope}`);
+    if (!grid) return;
+    grid.innerHTML = gridInnerHTML(scope);
+    if (window.lucide) lucide.createIcons();
+}
+
+function photoUploaderHTML(scope, existingStr) {
+    initPhotoScope(scope, existingStr);
+    return `
+        <label class="admin-label"><i data-lucide="image"></i> Fotos</label>
+        <div class="photo-grid" id="photo-grid-${scope}">${gridInnerHTML(scope)}</div>
+        <label class="photo-dropzone" for="photo-input-${scope}">
+            <i data-lucide="upload-cloud"></i>
+            <span>Tocá o arrastrá fotos acá</span>
+            <input type="file" id="photo-input-${scope}" accept="image/*" multiple style="display:none" onchange="onPhotoInput('${scope}', this)">
+        </label>
+        <div class="photo-progress" id="photo-progress-${scope}" style="display:none"><div class="photo-progress-bar" id="photo-progress-bar-${scope}"></div></div>`;
+}
+
+function onPhotoInput(scope, inputEl) {
+    const st = photoState[scope] || initPhotoScope(scope, '');
+    Array.from(inputEl.files || []).forEach((file) => {
+        if (!file.type || file.type.indexOf('image/') !== 0) return;
+        const id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        st.pending.push({ id, file, previewUrl: URL.createObjectURL(file) });
+    });
+    inputEl.value = '';
+    renderPhotoGrid(scope);
+}
+
+function removeExistingPhotoAt(scope, i) {
+    const st = photoState[scope];
+    if (!st) return;
+    st.existing.splice(i, 1);
+    renderPhotoGrid(scope);
+}
+
+function removePendingPhoto(scope, id) {
+    const st = photoState[scope];
+    if (!st) return;
+    const idx = st.pending.findIndex(p => p.id === id);
+    if (idx >= 0) {
+        try { URL.revokeObjectURL(st.pending[idx].previewUrl); } catch (e) {}
+        st.pending.splice(idx, 1);
+    }
+    renderPhotoGrid(scope);
+}
+
+async function loadBitmap(file) {
+    if (typeof createImageBitmap === 'function') {
+        try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+        catch (e) { try { return await createImageBitmap(file); } catch (e2) {} }
+    }
+    return await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('No se pudo decodificar la imagen'));
+        img.src = URL.createObjectURL(file);
+    });
+}
+
+// Genera el thumbnail (≤400px, JPEG q≈0.6) y devuelve su base64 (sin prefijo data:).
+async function makeThumbBase64(file) {
+    const bmp = await loadBitmap(file);
+    const iw = bmp.width || bmp.naturalWidth;
+    const ih = bmp.height || bmp.naturalHeight;
+    const scale = iw > THUMB_MAX_WIDTH ? THUMB_MAX_WIDTH / iw : 1;
+    const w = Math.max(1, Math.round(iw * scale));
+    const h = Math.max(1, Math.round(ih * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.fillStyle = '#ffffff';           // flatten alpha (como convert('RGB') en el .py)
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(bmp, 0, 0, w, h);
+    if (bmp.close) { try { bmp.close(); } catch (e) {} }
+    return canvas.toDataURL('image/jpeg', THUMB_JPEG_QUALITY).split(',')[1];
+}
+
+function readFileBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(reader.error || new Error('No se pudo leer el archivo'));
+        reader.readAsDataURL(file);
+    });
+}
+
+function folderFromFecha(fecha) {
+    const m = (fecha || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m) return `${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}-${m[3]}`;
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+}
+
+function buildPhotoName(file) {
+    const dot = file.name.lastIndexOf('.');
+    let base = (dot > 0 ? file.name.slice(0, dot) : file.name)
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+    if (!base) base = 'foto';
+    const ext = (dot > 0 ? file.name.slice(dot + 1) : 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    return { name: `${base}-${suffix}`, ext };
+}
+
+// Sube secuencialmente las fotos pendientes del scope. Devuelve las rutas nuevas.
+async function uploadPendingPhotos(scope, folder) {
+    const st = photoState[scope];
+    if (!st || !st.pending.length) return [];
+
+    const progress = document.getElementById(`photo-progress-${scope}`);
+    const bar = document.getElementById(`photo-progress-bar-${scope}`);
+    if (progress) progress.style.display = 'block';
+
+    const newPaths = [];
+    const total = st.pending.length;
+    for (let i = 0; i < total; i++) {
+        const file = st.pending[i].file;
+        const { name, ext } = buildPhotoName(file);
+        const [thumbB64, originalB64] = await Promise.all([
+            makeThumbBase64(file),
+            readFileBase64(file)
+        ]);
+        const res = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'uploadPhotos',
+                adminSecret: getAdminSecret(),
+                folder, name, ext, originalB64, thumbB64
+            })
+        });
+        const result = await res.json();
+        if (!result.success || !result.path) {
+            throw new Error(result.message || 'Falló la subida de una foto.');
+        }
+        newPaths.push(result.path);
+        if (bar) bar.style.width = Math.round(((i + 1) / total) * 100) + '%';
+    }
+    if (progress) setTimeout(() => { progress.style.display = 'none'; if (bar) bar.style.width = '0%'; }, 600);
+    return newPaths;
+}
+
+// Sube lo pendiente y devuelve el string final de `fotos` (existentes + nuevas).
+async function collectFotos(scope, fecha) {
+    const st = photoState[scope] || initPhotoScope(scope, '');
+    const folder = folderFromFecha(fecha);
+    const newPaths = await uploadPendingPhotos(scope, folder);
+    st.pending.forEach(p => { try { URL.revokeObjectURL(p.previewUrl); } catch (e) {} });
+    st.pending = [];
+    st.existing = st.existing.concat(newPaths);
+    renderPhotoGrid(scope);
+    return st.existing.join('; ');
+}
+
+// Inyecta el uploader en los forms de creación (placeholders en admin.html).
+function setupNewPhotoUploaders() {
+    const resto = document.getElementById('photo-uploader-new-resto');
+    if (resto) resto.innerHTML = photoUploaderHTML('new-resto', '');
+    const alf = document.getElementById('photo-uploader-new-alfajor');
+    if (alf) alf.innerHTML = photoUploaderHTML('new-alfajor', '');
+    if (window.lucide) lucide.createIcons();
+}
+
+// Handlers usados por atributos inline (onchange/onclick) → exponer en window.
+window.onPhotoInput = onPhotoInput;
+window.removeExistingPhotoAt = removeExistingPhotoAt;
+window.removePendingPhoto = removePendingPhoto;
 
 // =============================================
 // SMART PASTE (JSON Auto-fill)

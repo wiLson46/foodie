@@ -52,6 +52,13 @@ var USERS_SHEET_NAME = 'usuarios';
 var PUBLIC_VOTES_CACHE_KEY = 'publicVotes_v1';
 var PUBLIC_VOTES_CACHE_TTL = 180; // 3 min
 
+// GitHub (repo de GitHub Pages donde viven las fotos estáticas).
+// El token va en Script Properties: GITHUB_TOKEN (fine-grained, Contents: read/write).
+var GITHUB_OWNER = 'wiLson46';
+var GITHUB_REPO = 'foodie';
+var GITHUB_BRANCH = 'main';
+var GITHUB_API = 'https://api.github.com';
+
 // =============================================
 // CAMPOS BASE de cada restaurante (columnas A-M aprox.)
 // =============================================
@@ -124,6 +131,9 @@ function doPost(e) {
       case 'generateToken':
         requireAdminSecret(postData);
         return sendJson(generateToken(postData));
+      case 'uploadPhotos':
+        requireAdminSecret(postData);
+        return sendJson(uploadPhotos(postData));
       case 'submitVote':
         return sendJson(submitVote(postData));
       case 'updateVote':
@@ -761,7 +771,8 @@ function getAlfajoresAdminList_() {
       id: idVal,
       name: nameVal,
       description: getVal(row, colMap, 'description') || getVal(row, colMap, 'descripcion') || '',
-      web: getVal(row, colMap, 'web') || ''
+      web: getVal(row, colMap, 'web') || '',
+      fotos: getVal(row, colMap, 'fotos') || ''
     });
   }
 
@@ -1085,7 +1096,8 @@ function addAlfajor(postData) {
     'id': 'id',
     'name': 'name',
     'description': 'description',
-    'web': 'web'
+    'web': 'web',
+    'fotos': 'fotos'
   };
 
   for (var field in fieldToHeader) {
@@ -1147,7 +1159,8 @@ function updateAlfajor(postData) {
   var fieldToHeader = {
     'name': 'name',
     'description': 'description',
-    'web': 'web'
+    'web': 'web',
+    'fotos': 'fotos'
   };
 
   for (var field in fieldToHeader) {
@@ -1170,6 +1183,102 @@ function updateAlfajor(postData) {
     success: true,
     message: "Alfajor '" + (datos.name || '') + "' actualizado correctamente."
   };
+}
+
+// =============================================
+// GITHUB: Subida de fotos (commit original + thumb al repo de Pages)
+// =============================================
+
+function githubHeaders_() {
+  var token = PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN');
+  if (!token) throw new Error('Servidor mal configurado: GITHUB_TOKEN no seteado.');
+  return {
+    'Authorization': 'Bearer ' + token,
+    'Accept': 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'comer-ar-admin'
+  };
+}
+
+function githubApi_(method, path, payloadObj) {
+  var options = {
+    method: method,
+    headers: githubHeaders_(),
+    muteHttpExceptions: true
+  };
+  if (payloadObj) {
+    options.contentType = 'application/json';
+    options.payload = JSON.stringify(payloadObj);
+  }
+  var resp = UrlFetchApp.fetch(GITHUB_API + path, options);
+  var code = resp.getResponseCode();
+  var text = resp.getContentText();
+  if (code < 200 || code >= 300) {
+    throw new Error('GitHub API ' + code + ': ' + text);
+  }
+  return text ? JSON.parse(text) : {};
+}
+
+// Defensa server-side: el cliente ya manda segmentos sanitizados.
+function sanitizeSegment_(s) {
+  return String(s || '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '');
+}
+
+/**
+ * Commitea una foto (original + thumbnail) al repo de GitHub Pages en UN solo commit
+ * (Git Trees API). Protegido por requireAdminSecret en doPost.
+ * Espera: { folder, name, ext, originalB64, thumbB64 } (base64 sin prefijo data:).
+ * Devuelve: { success, path: './fotos/<folder>/<name>.<ext>', thumb: './fotos_thumb/...' }
+ */
+function uploadPhotos(postData) {
+  var folder = sanitizeSegment_(postData.folder);
+  var name = sanitizeSegment_(postData.name);
+  var ext = String(postData.ext || 'jpg').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'jpg';
+  var originalB64 = postData.originalB64;
+  var thumbB64 = postData.thumbB64;
+
+  if (!folder || !name) throw new Error('Falta folder o name para la foto.');
+  if (!originalB64 || !thumbB64) throw new Error('Faltan los datos de la imagen.');
+
+  var fullPath = 'fotos/' + folder + '/' + name + '.' + ext;
+  var thumbPath = 'fotos_thumb/' + folder + '/' + name + '.jpg';
+  var base = '/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO;
+  var headRef = 'heads/' + GITHUB_BRANCH;
+
+  // 1) ref de la rama -> sha del commit base
+  var ref = githubApi_('get', base + '/git/ref/' + headRef);
+  var baseCommitSha = ref.object.sha;
+
+  // 2) commit base -> sha del tree base
+  var baseCommit = githubApi_('get', base + '/git/commits/' + baseCommitSha);
+  var baseTreeSha = baseCommit.tree.sha;
+
+  // 3) blobs (original + thumb)
+  var blobFull = githubApi_('post', base + '/git/blobs', { content: originalB64, encoding: 'base64' });
+  var blobThumb = githubApi_('post', base + '/git/blobs', { content: thumbB64, encoding: 'base64' });
+
+  // 4) nuevo tree colgando del base
+  var newTree = githubApi_('post', base + '/git/trees', {
+    base_tree: baseTreeSha,
+    tree: [
+      { path: fullPath, mode: '100644', type: 'blob', sha: blobFull.sha },
+      { path: thumbPath, mode: '100644', type: 'blob', sha: blobThumb.sha }
+    ]
+  });
+
+  // 5) nuevo commit
+  var newCommit = githubApi_('post', base + '/git/commits', {
+    message: 'admin: foto ' + fullPath,
+    tree: newTree.sha,
+    parents: [baseCommitSha]
+  });
+
+  // 6) mover el ref de la rama al nuevo commit
+  githubApi_('patch', base + '/git/refs/' + headRef, { sha: newCommit.sha });
+
+  return { success: true, path: './' + fullPath, thumb: './' + thumbPath };
 }
 
 // =============================================
