@@ -3,7 +3,7 @@
  * Cargar antes de main.js / admin.js / carga.js en cada HTML.
  */
 window.COMER_CONFIG = {
-    SCRIPT_URL: 'https://script.google.com/macros/s/AKfycby2zCGwf1cyx82PH_nQIiHoOj-j21ZODNDFXkOQc2ssgnnbnpeoO7YIbAVSyf7sUQJ7/exec',
+    SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwpKyJcHnDWDiSLZXz1_foSbxEKlyFyTqSaiK_22GzZUQuDLPLS_N078pU6aBR3_xy7/exec',
     TRACKING_URL: 'https://script.google.com/macros/s/AKfycbzliZeD8VmFGgCmvUMsm7MmwNDkvsIdsbF6RfY550eEW2Ls9VLHb1CnfljO_hAxaDt1/exec',
     MAIN_DATA_SHEET: 'https://docs.google.com/spreadsheets/d/1x6ZnQFGZW-YkzoCxN51NXvpsYl3XuV4rtfBN5k7EucA/export?format=csv',
 
@@ -15,6 +15,12 @@ window.COMER_CONFIG = {
     // Authorized JavaScript origins debe incluir https://wilson46.github.io y, para dev,
     // http://localhost:8000 / http://127.0.0.1:8000.
     GOOGLE_CLIENT_ID: '1016739440960-m9hh2gv6r3aj0c9lc9v8ic1h5u1i393k.apps.googleusercontent.com',
+
+    // --- Admin ---
+    // Allowlist para gatear el panel admin. SOLO se usa para UX (mostrar/ocultar el
+    // panel según el email logueado). La seguridad real se valida en el backend
+    // contra la Script Property ADMIN_EMAILS (Code.gs > requireAdmin).
+    ADMIN_EMAILS: ['flashiando@gmail.com'],
 
     // --- Voto público ---
     // Los promedios públicos se sirven AGREGADOS (sin emails) desde el backend

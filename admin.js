@@ -25,26 +25,92 @@ const restaurantCount = document.getElementById('restaurant-count');
 const toastContainer = document.getElementById('toast-container');
 
 // =============================================
-// SECRET ADMIN
+// AUTENTICACIÓN — Google login (solo admins)
 // =============================================
-function getAdminSecret() {
-    let s = sessionStorage.getItem('adminSecret');
-    if (!s) {
-        s = window.prompt('Admin secret:') || '';
-        s = s.trim();
-        if (s) sessionStorage.setItem('adminSecret', s);
-    }
-    return s ? s.trim() : '';
+// La contraseña fue reemplazada por login de Google. Gatea por email: el chequeo
+// del front (COMER_CONFIG.ADMIN_EMAILS) es solo UX; la seguridad real la valida
+// el backend (Code.gs > requireAdmin) verificando el ID token contra su allowlist.
+
+const adminGate = document.getElementById('admin-gate');
+const adminGateLogin = document.getElementById('admin-gate-login');
+const adminGateDenied = document.getElementById('admin-gate-denied');
+const adminLoginBtn = document.getElementById('admin-login-btn');
+const adminDeniedEmail = document.getElementById('admin-denied-email');
+
+function isAdminEmail(email) {
+    const list = (window.COMER_CONFIG && window.COMER_CONFIG.ADMIN_EMAILS) || [];
+    return !!email && list.indexOf(String(email).toLowerCase()) !== -1;
 }
 
-function clearAdminSecret() {
-    sessionStorage.removeItem('adminSecret');
+// Devuelve el ID token de Google para autorizar las requests al backend.
+// ComerAuth.getCredential() re-promptea si la sesión expiró; si no hay, lanza.
+async function getCred() {
+    const cred = await ComerAuth.getCredential();
+    if (!cred) throw new Error('Tu sesión expiró. Volvé a iniciar sesión.');
+    return cred;
+}
+
+function showGateLogin() {
+    if (adminLoader) adminLoader.style.display = 'none';
+    if (adminContent) adminContent.style.display = 'none';
+    if (adminGateDenied) adminGateDenied.style.display = 'none';
+    if (adminGateLogin) adminGateLogin.style.display = 'block';
+    if (adminGate) adminGate.style.display = 'flex';
+    if (statusText) { statusText.textContent = 'Iniciá sesión para administrar'; statusText.style.color = ''; }
+    if (adminLoginBtn && window.ComerAuth) {
+        ComerAuth.renderButton(adminLoginBtn, { theme: 'filled_black', size: 'large', shape: 'pill', text: 'signin_with' });
+    }
+}
+
+function showGateDenied(email) {
+    if (adminLoader) adminLoader.style.display = 'none';
+    if (adminContent) adminContent.style.display = 'none';
+    if (adminGateLogin) adminGateLogin.style.display = 'none';
+    if (adminDeniedEmail) adminDeniedEmail.textContent = email || '';
+    if (adminGateDenied) adminGateDenied.style.display = 'block';
+    if (adminGate) adminGate.style.display = 'flex';
+    if (statusText) { statusText.textContent = 'Cuenta sin permisos de admin'; statusText.style.color = '#e74c3c'; }
+}
+
+function hideGate() {
+    if (adminGate) adminGate.style.display = 'none';
 }
 
 // =============================================
 // INICIALIZACIÓN
 // =============================================
-document.addEventListener('DOMContentLoaded', initAdmin);
+let adminLoaded = false;
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (!window.ComerAuth) {
+        if (statusText) {
+            statusText.textContent = '⚠ Falta auth.js (login de Google)';
+            statusText.style.color = '#e74c3c';
+        }
+        if (adminLoader) adminLoader.innerHTML = '<p style="color:#e74c3c;">No se pudo cargar el login de Google (auth.js).</p>';
+        return;
+    }
+    const switchBtn = document.getElementById('admin-switch-account');
+    if (switchBtn) switchBtn.addEventListener('click', () => ComerAuth.logout());
+
+    ComerAuth.subscribe(onAuthChange);
+    ComerAuth.init();
+});
+
+// Reacciona a cambios de sesión: login / sin permisos / carga del panel (una sola vez).
+function onAuthChange(user) {
+    if (!user) {
+        adminLoaded = false;
+        showGateLogin();
+    } else if (!isAdminEmail(user.email)) {
+        adminLoaded = false;
+        showGateDenied(user.email);
+    } else if (!adminLoaded) {
+        adminLoaded = true;
+        hideGate();
+        initAdmin();
+    }
+}
 
 async function initAdmin() {
     if (!SCRIPT_URL) {
@@ -54,22 +120,31 @@ async function initAdmin() {
         return;
     }
 
-    // Los endpoints GET admin/getStats ahora requieren el secret (igual que los POST).
-    const secretQS = '&adminSecret=' + encodeURIComponent(getAdminSecret());
+    if (adminLoader) adminLoader.style.display = '';
+
+    // Los endpoints GET admin/getStats/getUsers se autorizan con el ID token de Google.
+    let credQS;
+    try {
+        credQS = '&credential=' + encodeURIComponent(await getCred());
+    } catch (e) {
+        adminLoaded = false;
+        showGateLogin();
+        return;
+    }
 
     try {
         // Carga en paralelo: datos admin + stats + usuarios
         const [adminRes, statsRes, usersRes] = await Promise.allSettled([
-            fetch(SCRIPT_URL + '?action=admin' + secretQS).then(r => r.json()),
-            fetch(SCRIPT_URL + '?action=getStats' + secretQS).then(r => r.json()),
-            fetch(SCRIPT_URL + '?action=getUsers' + secretQS).then(r => r.json())
+            fetch(SCRIPT_URL + '?action=admin' + credQS).then(r => r.json()),
+            fetch(SCRIPT_URL + '?action=getStats' + credQS).then(r => r.json()),
+            fetch(SCRIPT_URL + '?action=getUsers' + credQS).then(r => r.json())
         ]);
 
         if (adminRes.status !== 'fulfilled') throw adminRes.reason || new Error('Error cargando datos');
         const json = adminRes.value;
         if (json.error) {
-            // Secret inválido: lo limpiamos para que el reload vuelva a pedirlo.
-            if (/no autorizado/i.test(json.error)) clearAdminSecret();
+            // El backend rechazó la sesión: volvemos al gate para reloguear con una cuenta admin.
+            if (/no autorizado/i.test(json.error)) { adminLoaded = false; showGateLogin(); return; }
             throw new Error(json.error);
         }
 
@@ -380,13 +455,14 @@ async function saveRestaurant(idx) {
     try {
         data.fotos = await collectFotos('edit-resto-' + idx, data.fecha);
 
+        const credential = await getCred();
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
                 action: 'updateRestaurant',
                 rowIndex: r.rowIndex,
                 data: data,
-                adminSecret: getAdminSecret()
+                credential
             })
         });
 
@@ -402,7 +478,6 @@ async function saveRestaurant(idx) {
                 setTimeout(() => { block.style.borderColor = ''; }, 2800);
             }
         } else {
-            if (/no autorizado/i.test(result.message || '')) clearAdminSecret();
             showToast(`❌ Error: ${result.message}`, 'error');
         }
 
@@ -446,12 +521,13 @@ async function createRestaurant() {
     try {
         data.fotos = await collectFotos('new-resto', data.fecha);
 
+        const credential = await getCred();
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
                 action: 'addRestaurant',
                 data: data,
-                adminSecret: getAdminSecret()
+                credential
             })
         });
 
@@ -478,7 +554,6 @@ async function createRestaurant() {
             }
 
         } else {
-            if (/no autorizado/i.test(result.message || '')) clearAdminSecret();
             showToast(`❌ Error: ${result.message}`, 'error');
         }
 
@@ -565,13 +640,14 @@ async function saveAlfajor(idx) {
     try {
         data.fotos = await collectFotos('edit-alf-' + idx, '');
 
+        const credential = await getCred();
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
                 action: 'updateAlfajor',
                 rowIndex: a.rowIndex,
                 data: data,
-                adminSecret: getAdminSecret()
+                credential
             })
         });
 
@@ -587,7 +663,6 @@ async function saveAlfajor(idx) {
                 setTimeout(() => { block.style.borderColor = ''; }, 2800);
             }
         } else {
-            if (/no autorizado/i.test(result.message || '')) clearAdminSecret();
             showToast(`❌ Error: ${result.message}`, 'error');
         }
     } catch (error) {
@@ -618,12 +693,13 @@ async function createAlfajor() {
     try {
         data.fotos = await collectFotos('new-alfajor', '');
 
+        const credential = await getCred();
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
                 action: 'addAlfajor',
                 data: data,
-                adminSecret: getAdminSecret()
+                credential
             })
         });
 
@@ -651,7 +727,6 @@ async function createAlfajor() {
             if (idEl && adminData.nextAlfajorId) idEl.value = adminData.nextAlfajorId;
 
         } else {
-            if (/no autorizado/i.test(result.message || '')) clearAdminSecret();
             showToast(`❌ Error: ${result.message}`, 'error');
         }
     } catch (error) {
@@ -775,6 +850,7 @@ async function generateLink() {
     setButtonLoading(btn, true);
 
     try {
+        const credential = await getCred();
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
@@ -783,7 +859,7 @@ async function generateLink() {
                 critico: critico,
                 fecha: linkType === 'alfajor' ? '' : fecha,
                 restaurante: restaurante,
-                adminSecret: getAdminSecret()
+                credential
             })
         });
 
@@ -809,7 +885,6 @@ async function generateLink() {
 
             if (window.lucide) lucide.createIcons();
         } else {
-            if (/no autorizado/i.test(result.message || '')) clearAdminSecret();
             showToast(`❌ Error: ${result.message}`, 'error');
         }
 
@@ -1064,6 +1139,7 @@ async function uploadPendingPhotos(scope, folder) {
 
     const newPaths = [];
     const total = st.pending.length;
+    const credential = await getCred();
     for (let i = 0; i < total; i++) {
         const file = st.pending[i].file;
         const { name, ext } = buildPhotoName(file);
@@ -1075,7 +1151,7 @@ async function uploadPendingPhotos(scope, folder) {
             method: 'POST',
             body: JSON.stringify({
                 action: 'uploadPhotos',
-                adminSecret: getAdminSecret(),
+                credential,
                 folder, name, ext, originalB64, thumbB64
             })
         });

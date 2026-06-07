@@ -79,17 +79,17 @@ function doGet(e) {
     var token = params.token || null;
 
     if (action === 'admin') {
-      requireAdminSecret(params);
+      requireAdmin(params);
       return sendJson(getAdminData());
     }
 
     if (action === 'getStats') {
-      requireAdminSecret(params);
+      requireAdmin(params);
       return sendJson(getStats());
     }
 
     if (action === 'getUsers') {
-      requireAdminSecret(params);
+      requireAdmin(params);
       return sendJson(getUsersAdmin_());
     }
 
@@ -117,22 +117,22 @@ function doPost(e) {
 
     switch (action) {
       case 'updateRestaurant':
-        requireAdminSecret(postData);
+        requireAdmin(postData);
         return sendJson(updateRestaurant(postData));
       case 'addRestaurant':
-        requireAdminSecret(postData);
+        requireAdmin(postData);
         return sendJson(addRestaurant(postData));
       case 'addAlfajor':
-        requireAdminSecret(postData);
+        requireAdmin(postData);
         return sendJson(addAlfajor(postData));
       case 'updateAlfajor':
-        requireAdminSecret(postData);
+        requireAdmin(postData);
         return sendJson(updateAlfajor(postData));
       case 'generateToken':
-        requireAdminSecret(postData);
+        requireAdmin(postData);
         return sendJson(generateToken(postData));
       case 'uploadPhotos':
-        requireAdminSecret(postData);
+        requireAdmin(postData);
         return sendJson(uploadPhotos(postData));
       case 'submitVote':
         return sendJson(submitVote(postData));
@@ -170,19 +170,27 @@ function doPost(e) {
 // =============================================
 
 /**
- * Valida el secret admin. Lanza error si no matchea.
- * Sirve tanto para POST (postData.adminSecret) como para GET (params.adminSecret).
- *
- * Para producción: configurar `ADMIN_SECRET` en Project Settings > Script Properties.
+ * Allowlist de emails admin. Se configura en Project Settings > Script Properties
+ * como `ADMIN_EMAILS` (emails separados por coma). Fallback hardcodeado a
+ * flashiando@gmail.com por robustez (si la property no está seteada).
  */
-function requireAdminSecret(postData) {
-  var expected = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET');
-  if (!expected) {
-    throw new Error('Servidor mal configurado: ADMIN_SECRET no seteado.');
-  }
-  if (!postData || postData.adminSecret !== expected) {
+function getAdminEmails_() {
+  var raw = PropertiesService.getScriptProperties().getProperty('ADMIN_EMAILS') || 'flashiando@gmail.com';
+  return raw.split(',').map(function (e) { return e.toLowerCase().trim(); }).filter(String);
+}
+
+/**
+ * Autoriza una acción de admin por identidad de Google (reemplaza la contraseña).
+ * Verifica el ID token (data.credential) y exige que el email esté en la allowlist.
+ * Sirve tanto para POST (postData.credential) como para GET (params.credential).
+ * Mantiene el mensaje "No autorizado." para que el frontend lo detecte.
+ */
+function requireAdmin(data) {
+  var profile = verifyGoogleIdToken_(data && data.credential);
+  if (getAdminEmails_().indexOf(profile.email) === -1) {
     throw new Error('No autorizado.');
   }
+  return profile;
 }
 
 /**
@@ -1228,7 +1236,7 @@ function sanitizeSegment_(s) {
 
 /**
  * Commitea una foto (original + thumbnail) al repo de GitHub Pages en UN solo commit
- * (Git Trees API). Protegido por requireAdminSecret en doPost.
+ * (Git Trees API). Protegido por requireAdmin en doPost.
  * Espera: { folder, name, ext, originalB64, thumbB64 } (base64 sin prefijo data:).
  * Devuelve: { success, path: './fotos/<folder>/<name>.<ext>', thumb: './fotos_thumb/...' }
  */

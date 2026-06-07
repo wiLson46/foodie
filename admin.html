@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="style.css?v=2.0">
 
     <!-- Libraries -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://unpkg.com/lucide@latest" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
 
@@ -923,6 +924,22 @@
 
         <!-- Main Content -->
         <main class="admin-container">
+            <!-- Gate de login (Google) — reemplaza la contraseña de admin -->
+            <div id="admin-gate"
+                style="display:none; flex-direction:column; align-items:center; justify-content:center; gap:1.25rem; padding:3rem 1rem; text-align:center; min-height:40vh;">
+                <div id="admin-gate-login">
+                    <p style="margin-bottom:1rem; color:var(--text-muted);">Iniciá sesión con tu cuenta de admin para
+                        gestionar Comer.ar.</p>
+                    <div id="admin-login-btn" style="display:flex; justify-content:center;"></div>
+                </div>
+                <div id="admin-gate-denied" style="display:none;">
+                    <p style="margin-bottom:1rem; color:#e74c3c;">La cuenta <strong id="admin-denied-email"></strong> no
+                        tiene permisos de admin.</p>
+                    <button class="admin-btn" id="admin-switch-account" style="max-width:220px; margin:0 auto;">Cambiar de
+                        cuenta</button>
+                </div>
+            </div>
+
             <!-- Loading State -->
             <div id="admin-loader" class="admin-loader">
                 <div class="spinner-large"></div>
@@ -1298,8 +1315,9 @@
     </script>
 
     <!-- Admin JS -->
-    <script src="config.js?v=2.2"></script>
-    <script src="admin.js?v=2.1"></script>
+    <script src="config.js?v=2.3"></script>
+    <script src="auth.js?v=2.0"></script>
+    <script src="admin.js?v=2.2"></script>
 </body>
 
 </html>
