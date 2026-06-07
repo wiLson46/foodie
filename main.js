@@ -575,7 +575,11 @@ function generatePhotosGalleryHTML(photosString) {
         `;
     }
 
-    const photos = photosString.split(';').map(url => url.trim()).filter(url => url.length > 0);
+    // Separa por ';' y limpia comillas sueltas / espacios (algunas celdas usan
+    // '";' como separador, dejando una comilla pegada al path → URL inválida).
+    const photos = photosString.split(';')
+        .map(url => url.trim().replace(/^["']+|["']+$/g, '').trim())
+        .filter(url => url.length > 0);
     const initialPhotos = photos.slice(0, INITIAL_PHOTOS_LIMIT);
     const remainingPhotos = photos.slice(INITIAL_PHOTOS_LIMIT);
     const hasMore = remainingPhotos.length > 0;
