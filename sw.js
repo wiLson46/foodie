@@ -4,15 +4,18 @@
  * - Stale-while-revalidate para CSV de Google Sheets.
  * - Network-only para POST (tracking, submitReview, etc.).
  */
-const CACHE_VERSION = 'comer-ar-v1';
+const CACHE_VERSION = 'comer-ar-v2';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 const DYNAMIC_CACHE = CACHE_VERSION + '-dynamic';
 
 const STATIC_ASSETS = [
     './',
     './index.html',
+    './perfil.html',
     './style.css',
     './config.js',
+    './auth.js',
+    './vote.js',
     './main.js',
     './manifest.json',
     './fotos/imagenes/logoB.png',

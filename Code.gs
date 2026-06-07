@@ -46,6 +46,12 @@ var MAX_DESCRIPTION_LEN = 45000;
 var PUBLIC_CACHE_KEY = 'publicData_v1';
 var PUBLIC_CACHE_TTL = 300; // 5 min
 
+// Pestaña de votos del público (mismo spreadsheet, otra hoja), targeteada por gid.
+var VOTES_SHEET_GID = 413818553;
+var USERS_SHEET_NAME = 'usuarios';
+var PUBLIC_VOTES_CACHE_KEY = 'publicVotes_v1';
+var PUBLIC_VOTES_CACHE_TTL = 180; // 3 min
+
 // =============================================
 // CAMPOS BASE de cada restaurante (columnas A-M aprox.)
 // =============================================
@@ -73,6 +79,17 @@ function doGet(e) {
     if (action === 'getStats') {
       requireAdminSecret(params);
       return sendJson(getStats());
+    }
+
+    if (action === 'getUsers') {
+      requireAdminSecret(params);
+      return sendJson(getUsersAdmin_());
+    }
+
+    // Promedios públicos de votos (agregados, SIN emails). Reemplaza la lectura
+    // por CSV: así los emails de la pestaña de votos no quedan expuestos.
+    if (action === 'publicVotes') {
+      return sendJson(getPublicVotes());
     }
 
     return sendJson(getPublicData(token));
@@ -107,6 +124,18 @@ function doPost(e) {
       case 'generateToken':
         requireAdminSecret(postData);
         return sendJson(generateToken(postData));
+      case 'submitVote':
+        return sendJson(submitVote(postData));
+      case 'updateVote':
+        return sendJson(updateVote(postData));
+      case 'deleteVote':
+        return sendJson(deleteVote(postData));
+      case 'getUserVotes':
+        return sendJson(getUserVotes(postData));
+      case 'registerUser':
+        return sendJson(registerUser(postData));
+      case 'deleteAccount':
+        return sendJson(deleteAccount(postData));
       case 'trackEvent':
         if (!checkRateLimit('trackEvent', clientKey_(e), 100, 60)) {
           return sendJson({ success: false, message: 'rate limited' });
@@ -1254,4 +1283,464 @@ function getStats() {
     monthlyViews: monthlyViews,
     restaurantViews: restaurantViews
   };
+}
+
+// =============================================
+// VOTO PÚBLICO (Google OAuth)
+// =============================================
+
+/**
+ * Verifica un ID token (JWT) de Google contra el endpoint tokeninfo.
+ * Chequea aud (== GOOGLE_CLIENT_ID), iss, exp y email_verified.
+ * Devuelve { email, name, picture, sub } o lanza error.
+ */
+function verifyGoogleIdToken_(credential) {
+  if (!credential) throw new Error('Falta la sesión de Google. Iniciá sesión para votar.');
+  var clientId = PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID');
+  if (!clientId) throw new Error('Servidor mal configurado: GOOGLE_CLIENT_ID no seteado.');
+
+  var url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential);
+  var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (resp.getResponseCode() !== 200) {
+    throw new Error('Sesión inválida o expirada. Volvé a iniciar sesión.');
+  }
+
+  var info;
+  try { info = JSON.parse(resp.getContentText()); } catch (e) { throw new Error('No se pudo validar la sesión.'); }
+
+  if (String(info.aud) !== String(clientId)) {
+    throw new Error('Token no emitido para esta aplicación.');
+  }
+  if (info.iss !== 'accounts.google.com' && info.iss !== 'https://accounts.google.com') {
+    throw new Error('Emisor de token inválido.');
+  }
+  var now = Math.floor(Date.now() / 1000);
+  if (info.exp && parseInt(info.exp, 10) < now) {
+    throw new Error('Sesión expirada. Volvé a iniciar sesión.');
+  }
+  if (!info.email || (info.email_verified !== 'true' && info.email_verified !== true)) {
+    throw new Error('No se pudo verificar tu email de Google.');
+  }
+
+  return {
+    email: String(info.email).toLowerCase().trim(),
+    name: info.name || info.email,
+    picture: info.picture || '',
+    sub: info.sub || ''
+  };
+}
+
+/**
+ * Pestaña de votos por gid. Garantiza los headers (incluida la columna 'tipo').
+ * Retorna la hoja o null si no se encuentra el gid.
+ */
+function getVotesSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  var sheet = null;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].getSheetId() === VOTES_SHEET_GID) { sheet = sheets[i]; break; }
+  }
+  if (!sheet) return null;
+
+  var lastCol = sheet.getLastColumn();
+  var headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  var map = buildColumnMap(headers);
+
+  if (map['timestamp'] === undefined && map['email'] === undefined) {
+    // Hoja vacía: escribir los 5 headers.
+    sheet.getRange(1, 1, 1, 5).setValues([['timestamp', 'email', 'vota', 'puntaje', 'tipo']]);
+    sheet.getRange(1, 1, 1, 5).setFontWeight('bold');
+  } else if (map['tipo'] === undefined) {
+    // Falta solo la columna 'tipo': agregarla al final sin tocar las filas viejas.
+    sheet.getRange(1, lastCol + 1).setValue('tipo').setFontWeight('bold');
+  }
+  return sheet;
+}
+
+/**
+ * Pestaña 'usuarios' (por nombre). La crea con headers si no existe.
+ */
+function getOrCreateUsersSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(USERS_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(USERS_SHEET_NAME);
+    sheet.getRange(1, 1, 1, 5).setValues([['email', 'nombre', 'foto', 'registrado', 'ultimo_acceso']]);
+    sheet.getRange(1, 1, 1, 5).setFontWeight('bold');
+  }
+  return sheet;
+}
+
+function normalizeVoteName_(s) {
+  return String(s || '').trim().toLowerCase();
+}
+
+function normalizeTipo_(tipo) {
+  var t = String(tipo || '').toLowerCase().trim();
+  if (t === 'delivery') return 'delivery';
+  if (t === 'alfajor') return 'alfajor';
+  return 'restaurant';
+}
+
+/**
+ * Los tipos que comparten ranking/cuadro: el alfajor va aparte; presencial y
+ * delivery se agregan juntos (igual que el frontend público).
+ */
+function tiposForBucket_(tipo) {
+  return tipo === 'alfajor' ? ['alfajor'] : ['restaurant', 'delivery'];
+}
+
+function validateVotePuntaje_(p) {
+  var n = parseFloat(p);
+  if (isNaN(n) || n < 0 || n > 10) throw new Error('Puntaje inválido (debe ser un número entre 0 y 10).');
+  return Math.round(n * 10) / 10;
+}
+
+function invalidateVotesCache_() {
+  try { CacheService.getScriptCache().remove(PUBLIC_VOTES_CACHE_KEY); } catch (e) {}
+}
+
+/**
+ * Alta o actualización del usuario en la pestaña 'usuarios'.
+ */
+function upsertUser_(profile) {
+  var sheet = getOrCreateUsersSheet_();
+  var nowStr = Utilities.formatDate(new Date(), SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(), 'dd/MM/yyyy HH:mm');
+  var lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    var emails = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (var i = 0; i < emails.length; i++) {
+      if (String(emails[i][0]).toLowerCase().trim() === profile.email) {
+        var rowIdx = i + 2;
+        sheet.getRange(rowIdx, 2).setValue(sanitizeCellValue(profile.name));
+        sheet.getRange(rowIdx, 3).setValue(sanitizeCellValue(profile.picture));
+        sheet.getRange(rowIdx, 5).setValue(nowStr);
+        return;
+      }
+    }
+  }
+  sheet.appendRow([profile.email, sanitizeCellValue(profile.name), sanitizeCellValue(profile.picture), nowStr, nowStr]);
+}
+
+/**
+ * Agrega una fila de voto respetando el orden de columnas (por header).
+ * El timestamp se sella como texto (formato '@') para que no se reinterprete.
+ */
+function appendVoteRow_(sheet, map, ts, email, itemName, puntaje, tipo) {
+  var width = sheet.getLastColumn();
+  var row = [];
+  for (var i = 0; i < width; i++) row.push('');
+  row[map['timestamp']] = ts;
+  row[map['email']] = email;
+  row[map['vota']] = sanitizeCellValue(itemName);
+  row[map['puntaje']] = puntaje;
+  row[map['tipo']] = tipo;
+  sheet.appendRow(row);
+
+  var r = sheet.getLastRow();
+  var tsCell = sheet.getRange(r, map['timestamp'] + 1);
+  tsCell.setNumberFormat('@');
+  tsCell.setValue(ts);
+}
+
+function findVoteRow_(sheet, map, email, name, tipo) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  var data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  var tgtName = normalizeVoteName_(name);
+  var tgtEmail = String(email).toLowerCase().trim();
+  var tgtTipo = String(tipo).toLowerCase().trim();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][map['email']]).toLowerCase().trim() !== tgtEmail) continue;
+    if (normalizeVoteName_(data[i][map['vota']]) !== tgtName) continue;
+    if (String(data[i][map['tipo']]).toLowerCase().trim() !== tgtTipo) continue;
+    return { rowIndex: i + 2, puntaje: data[i][map['puntaje']] };
+  }
+  return null;
+}
+
+/**
+ * Promedio + cantidad de votos de un ítem (entre los tipos indicados).
+ */
+function aggregateForItem_(sheet, map, name, tipos) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { avg: '-', count: 0 };
+  var data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  var target = normalizeVoteName_(name);
+  var total = 0, count = 0;
+  for (var i = 0; i < data.length; i++) {
+    var t = String(data[i][map['tipo']]).toLowerCase().trim();
+    if (tipos.indexOf(t) === -1) continue;
+    if (normalizeVoteName_(data[i][map['vota']]) !== target) continue;
+    var p = parseFloat(data[i][map['puntaje']]);
+    if (!isNaN(p)) { total += p; count++; }
+  }
+  return { avg: count ? (total / count).toFixed(1) : '-', count: count };
+}
+
+function getVotesForEmail_(email) {
+  var sheet = getVotesSheet_();
+  if (!sheet) return [];
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var map = buildColumnMap(headers);
+  var data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  var tgt = String(email).toLowerCase().trim();
+  var out = [];
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][map['email']]).toLowerCase().trim() !== tgt) continue;
+    out.push({
+      vota: String(data[i][map['vota']]).trim(),
+      tipo: String(data[i][map['tipo']]).toLowerCase().trim(),
+      puntaje: String(data[i][map['puntaje']]).trim(),
+      timestamp: String(data[i][map['timestamp']]).trim()
+    });
+  }
+  return out;
+}
+
+// --- Endpoints ---
+
+function submitVote(postData) {
+  var profile = verifyGoogleIdToken_(postData.credential);
+  if (!checkRateLimit('submitVote', profile.email, 20, 60)) {
+    return { success: false, message: 'Demasiados votos en poco tiempo. Esperá un momento.' };
+  }
+
+  var name = String(postData.vota || '').trim();
+  if (!name) throw new Error('Falta el ítem a votar.');
+  var tipo = normalizeTipo_(postData.tipo);
+  var puntaje = validateVotePuntaje_(postData.puntaje);
+
+  var sheet = getVotesSheet_();
+  if (!sheet) throw new Error('No se encontró la planilla de votos.');
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var map = buildColumnMap(headers);
+
+  upsertUser_(profile);
+
+  var existing = findVoteRow_(sheet, map, profile.email, name, tipo);
+  if (existing) {
+    var aggExist = aggregateForItem_(sheet, map, name, tiposForBucket_(tipo));
+    return {
+      success: false,
+      code: 'already_voted',
+      message: 'Ya tenés un voto registrado para esto.',
+      puntaje: String(existing.puntaje),
+      avg: aggExist.avg,
+      count: aggExist.count
+    };
+  }
+
+  var ts = Utilities.formatDate(new Date(), SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(), 'dd/MM/yyyy HH:mm');
+  appendVoteRow_(sheet, map, ts, profile.email, name, puntaje, tipo);
+  invalidateVotesCache_();
+
+  var agg = aggregateForItem_(sheet, map, name, tiposForBucket_(tipo));
+  return { success: true, avg: agg.avg, count: agg.count, puntaje: String(puntaje) };
+}
+
+function updateVote(postData) {
+  var profile = verifyGoogleIdToken_(postData.credential);
+  if (!checkRateLimit('updateVote', profile.email, 20, 60)) {
+    return { success: false, message: 'Demasiados cambios en poco tiempo. Esperá un momento.' };
+  }
+
+  var name = String(postData.vota || '').trim();
+  if (!name) throw new Error('Falta el ítem a votar.');
+  var tipo = normalizeTipo_(postData.tipo);
+  var puntaje = validateVotePuntaje_(postData.puntaje);
+
+  var sheet = getVotesSheet_();
+  if (!sheet) throw new Error('No se encontró la planilla de votos.');
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var map = buildColumnMap(headers);
+
+  upsertUser_(profile);
+
+  var ts = Utilities.formatDate(new Date(), SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(), 'dd/MM/yyyy HH:mm');
+  var existing = findVoteRow_(sheet, map, profile.email, name, tipo);
+  if (!existing) {
+    // Idempotente: si no había voto previo, lo creamos.
+    appendVoteRow_(sheet, map, ts, profile.email, name, puntaje, tipo);
+  } else {
+    sheet.getRange(existing.rowIndex, map['puntaje'] + 1).setValue(puntaje);
+    var tsCell = sheet.getRange(existing.rowIndex, map['timestamp'] + 1);
+    tsCell.setNumberFormat('@');
+    tsCell.setValue(ts);
+  }
+  invalidateVotesCache_();
+
+  var agg = aggregateForItem_(sheet, map, name, tiposForBucket_(tipo));
+  return { success: true, avg: agg.avg, count: agg.count, puntaje: String(puntaje) };
+}
+
+function deleteVote(postData) {
+  var profile = verifyGoogleIdToken_(postData.credential);
+  var name = String(postData.vota || '').trim();
+  if (!name) throw new Error('Falta el ítem.');
+  var tipo = normalizeTipo_(postData.tipo);
+
+  var sheet = getVotesSheet_();
+  if (!sheet) throw new Error('No se encontró la planilla de votos.');
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var map = buildColumnMap(headers);
+
+  var existing = findVoteRow_(sheet, map, profile.email, name, tipo);
+  if (existing) {
+    sheet.deleteRow(existing.rowIndex);
+    invalidateVotesCache_();
+  }
+  var agg = aggregateForItem_(sheet, map, name, tiposForBucket_(tipo));
+  return { success: true, avg: agg.avg, count: agg.count };
+}
+
+function getUserVotes(postData) {
+  var profile = verifyGoogleIdToken_(postData.credential);
+  return { success: true, profile: profile, votes: getVotesForEmail_(profile.email) };
+}
+
+function registerUser(postData) {
+  var profile = verifyGoogleIdToken_(postData.credential);
+  upsertUser_(profile);
+  return { success: true, profile: profile, votes: getVotesForEmail_(profile.email) };
+}
+
+function deleteAccount(postData) {
+  var profile = verifyGoogleIdToken_(postData.credential);
+
+  // 1) Borrar todos los votos del usuario (de abajo hacia arriba).
+  var sheet = getVotesSheet_();
+  if (sheet) {
+    var lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      var map = buildColumnMap(headers);
+      var data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+      for (var i = data.length - 1; i >= 0; i--) {
+        if (String(data[i][map['email']]).toLowerCase().trim() === profile.email) {
+          sheet.deleteRow(i + 2);
+        }
+      }
+    }
+    invalidateVotesCache_();
+  }
+
+  // 2) Borrar la fila del usuario en 'usuarios'.
+  var usersSheet = getOrCreateUsersSheet_();
+  var ulast = usersSheet.getLastRow();
+  if (ulast >= 2) {
+    var emails = usersSheet.getRange(2, 1, ulast - 1, 1).getValues();
+    for (var j = emails.length - 1; j >= 0; j--) {
+      if (String(emails[j][0]).toLowerCase().trim() === profile.email) {
+        usersSheet.deleteRow(j + 2);
+      }
+    }
+  }
+
+  return { success: true };
+}
+
+/**
+ * Promedios públicos agregados (SIN emails), cacheados. Es lo que consume el
+ * frontend en vez de leer la pestaña de votos por CSV.
+ *   { restaurants: { <name_lower>: {avg,count} }, alfajores: { ... } }
+ */
+function getPublicVotes() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get(PUBLIC_VOTES_CACHE_KEY);
+  if (cached) { try { return JSON.parse(cached); } catch (e) {} }
+
+  var result = { success: true, restaurants: {}, alfajores: {} };
+  var sheet = getVotesSheet_();
+  if (sheet) {
+    var lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      var map = buildColumnMap(headers);
+      var data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+      var accR = {}, accA = {};
+      for (var i = 0; i < data.length; i++) {
+        var name = String(data[i][map['vota']]).trim();
+        if (!name) continue;
+        var p = parseFloat(data[i][map['puntaje']]);
+        if (isNaN(p)) continue;
+        var tipo = String(data[i][map['tipo']]).toLowerCase().trim();
+        var key = name.toLowerCase();
+        var acc = (tipo === 'alfajor') ? accA : accR;
+        if (!acc[key]) acc[key] = { total: 0, count: 0 };
+        acc[key].total += p;
+        acc[key].count++;
+      }
+      Object.keys(accR).forEach(function (k) {
+        result.restaurants[k] = { avg: (accR[k].total / accR[k].count).toFixed(1), count: accR[k].count };
+      });
+      Object.keys(accA).forEach(function (k) {
+        result.alfajores[k] = { avg: (accA[k].total / accA[k].count).toFixed(1), count: accA[k].count };
+      });
+    }
+  }
+
+  try { cache.put(PUBLIC_VOTES_CACHE_KEY, JSON.stringify(result), PUBLIC_VOTES_CACHE_TTL); } catch (e) {}
+  return result;
+}
+
+/**
+ * ADMIN: usuarios registrados + sus votos. Requiere adminSecret (en doGet).
+ */
+function getUsersAdmin_() {
+  var users = [];
+  var byEmail = {};
+
+  var usersSheet = getOrCreateUsersSheet_();
+  var ulast = usersSheet.getLastRow();
+  if (ulast >= 2) {
+    var uheaders = usersSheet.getRange(1, 1, 1, usersSheet.getLastColumn()).getValues()[0];
+    var umap = buildColumnMap(uheaders);
+    var udata = usersSheet.getRange(2, 1, ulast - 1, usersSheet.getLastColumn()).getValues();
+    for (var i = 0; i < udata.length; i++) {
+      var em = String(udata[i][umap['email']]).toLowerCase().trim();
+      if (!em) continue;
+      var u = {
+        email: em,
+        nombre: String(udata[i][umap['nombre']] || ''),
+        foto: String(udata[i][umap['foto']] || ''),
+        registrado: String(udata[i][umap['registrado']] || ''),
+        ultimoAcceso: String(udata[i][umap['ultimo_acceso']] || ''),
+        votes: []
+      };
+      users.push(u);
+      byEmail[em] = u;
+    }
+  }
+
+  var vsheet = getVotesSheet_();
+  if (vsheet) {
+    var vlast = vsheet.getLastRow();
+    if (vlast >= 2) {
+      var vheaders = vsheet.getRange(1, 1, 1, vsheet.getLastColumn()).getValues()[0];
+      var vmap = buildColumnMap(vheaders);
+      var vdata = vsheet.getRange(2, 1, vlast - 1, vsheet.getLastColumn()).getValues();
+      for (var k = 0; k < vdata.length; k++) {
+        var vem = String(vdata[k][vmap['email']]).toLowerCase().trim();
+        if (!vem) continue;
+        var vote = {
+          vota: String(vdata[k][vmap['vota']] || ''),
+          tipo: String(vdata[k][vmap['tipo']] || '').toLowerCase().trim(),
+          puntaje: String(vdata[k][vmap['puntaje']] || ''),
+          timestamp: String(vdata[k][vmap['timestamp']] || '')
+        };
+        if (!byEmail[vem]) {
+          var nu = { email: vem, nombre: '', foto: '', registrado: '', ultimoAcceso: '', votes: [] };
+          users.push(nu);
+          byEmail[vem] = nu;
+        }
+        byEmail[vem].votes.push(vote);
+      }
+    }
+  }
+
+  return { success: true, users: users };
 }

@@ -36,12 +36,14 @@
         rel="stylesheet">
 
     <!-- CSS -->
-    <link rel="stylesheet" href="style.css?v=1.9">
+    <link rel="stylesheet" href="style.css?v=2.0">
 
     <!-- Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" defer></script>
     <script src="https://unpkg.com/lucide@0.344.0" defer></script>
+    <!-- Google Identity Services (login) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 
 <body class="light-mode">
@@ -61,6 +63,8 @@
                             <span class="slider round"></span>
                         </label>
                     </div>
+                    <!-- Login / perfil de Google (render dinámico desde main.js) -->
+                    <div id="auth-menu-section"></div>
                 </div>
             </div>
         </nav>
@@ -158,8 +162,10 @@
 
 
     <!-- JavaScript -->
-    <script src="config.js?v=1.8"></script>
-    <script src="main.js?v=1.9"></script>
+    <script src="config.js?v=2.0"></script>
+    <script src="auth.js?v=2.0"></script>
+    <script src="vote.js?v=2.0"></script>
+    <script src="main.js?v=2.0"></script>
 </body>
 
 </html>

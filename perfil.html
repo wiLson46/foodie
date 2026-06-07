@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi perfil - Comer.ar</title>
+    <meta name="description" content="Tus votos en Comer.ar">
+    <meta name="robots" content="noindex">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="style.css?v=2.0">
+
+    <!-- Libraries -->
+    <script src="https://unpkg.com/lucide@0.344.0" defer></script>
+    <!-- Google Identity Services (login) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+
+<body class="light-mode">
+    <div id="app">
+        <!-- Settings -->
+        <nav class="settings-nav" aria-label="Configuración">
+            <div class="dropdown">
+                <button id="settings-btn" class="icon-btn" aria-label="Abrir menú de configuración" aria-expanded="false">
+                    <i data-lucide="settings"></i>
+                </button>
+                <div id="settings-menu" class="dropdown-content hidden" role="menu">
+                    <div class="menu-item" role="menuitem">
+                        <span>Modo Oscuro</span>
+                        <label class="switch">
+                            <input type="checkbox" id="dark-mode-toggle" aria-label="Activar modo oscuro">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <a href="index.html" class="icon-btn" style="margin-right: 0.5rem; text-decoration: none; display: inline-flex" aria-label="Volver a Inicio">
+                <i data-lucide="home"></i>
+            </a>
+        </nav>
+
+        <header class="carga-header" style="text-align:center; margin-bottom:2rem;">
+            <div class="logo-container">
+                <img src="./fotos/imagenes/logoB.png" alt="Comer.ar Logo" class="logo-img light-logo">
+                <img src="./fotos/imagenes/logoW.png" alt="Comer.ar Logo" class="logo-img dark-logo">
+            </div>
+            <h1 style="font-family: var(--font-title); font-size: 2rem; margin-top: 1rem; display:flex; align-items:center; justify-content:center; gap:0.6rem;">
+                <i data-lucide="user-circle" style="color:var(--gold);"></i>
+                Mi perfil
+            </h1>
+            <p class="subtitle" id="status-text">Tus votos y tu cuenta.</p>
+        </header>
+
+        <main class="view glass-effect perfil-container">
+            <div id="perfil-content">
+                <div class="perfil-loader">
+                    <p style="text-align:center; color:var(--text-muted);">Cargando…</p>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer" style="text-align:center; margin-top:3rem; color:var(--text-muted); font-size:0.9rem;">
+            <p>Copyright 2026 - Wild Ideas - V1.6</p>
+        </footer>
+    </div>
+
+    <!-- Dark mode + settings (compartido con las otras páginas, versión inline) -->
+    <script>
+        (function () {
+            const darkModeToggle = document.getElementById('dark-mode-toggle');
+            const body = document.body;
+            const settingsBtn = document.getElementById('settings-btn');
+            const settingsMenu = document.getElementById('settings-menu');
+
+            if (localStorage.getItem('darkMode') === 'true') {
+                body.classList.remove('light-mode');
+                body.classList.add('dark-mode');
+                darkModeToggle.checked = true;
+            }
+            darkModeToggle.addEventListener('change', () => {
+                const on = darkModeToggle.checked;
+                body.classList.toggle('dark-mode', on);
+                body.classList.toggle('light-mode', !on);
+                localStorage.setItem('darkMode', String(on));
+            });
+            settingsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                settingsMenu.classList.toggle('hidden');
+                const ex = settingsBtn.getAttribute('aria-expanded') === 'true';
+                settingsBtn.setAttribute('aria-expanded', String(!ex));
+            });
+            document.addEventListener('click', (e) => {
+                if (!settingsMenu.classList.contains('hidden') && !e.target.closest('.settings-nav')) {
+                    settingsMenu.classList.add('hidden');
+                    settingsBtn.setAttribute('aria-expanded', 'false');
+                }
+            });
+        })();
+    </script>
+
+    <!-- JavaScript -->
+    <script src="config.js?v=2.0"></script>
+    <script src="auth.js?v=2.0"></script>
+    <script src="vote.js?v=2.0"></script>
+    <script src="perfil.js?v=2.0"></script>
+</body>
+
+</html>

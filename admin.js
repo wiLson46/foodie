@@ -58,10 +58,11 @@ async function initAdmin() {
     const secretQS = '&adminSecret=' + encodeURIComponent(getAdminSecret());
 
     try {
-        // Carga en paralelo: datos admin + stats
-        const [adminRes, statsRes] = await Promise.allSettled([
+        // Carga en paralelo: datos admin + stats + usuarios
+        const [adminRes, statsRes, usersRes] = await Promise.allSettled([
             fetch(SCRIPT_URL + '?action=admin' + secretQS).then(r => r.json()),
-            fetch(SCRIPT_URL + '?action=getStats' + secretQS).then(r => r.json())
+            fetch(SCRIPT_URL + '?action=getStats' + secretQS).then(r => r.json()),
+            fetch(SCRIPT_URL + '?action=getUsers' + secretQS).then(r => r.json())
         ]);
 
         if (adminRes.status !== 'fulfilled') throw adminRes.reason || new Error('Error cargando datos');
@@ -130,6 +131,22 @@ async function initAdmin() {
                     <div class="stats-empty">
                         <i data-lucide="bar-chart-3"></i>
                         <p>No se pudieron cargar las estadísticas</p>
+                    </div>
+                `;
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+
+        // Procesar usuarios si vinieron OK
+        if (usersRes.status === 'fulfilled' && !usersRes.value.error) {
+            renderUsers(usersRes.value);
+        } else {
+            const usersLoader = document.getElementById('users-loader');
+            if (usersLoader) {
+                usersLoader.innerHTML = `
+                    <div class="stats-empty">
+                        <i data-lucide="users"></i>
+                        <p>No se pudieron cargar los usuarios</p>
                     </div>
                 `;
                 if (window.lucide) lucide.createIcons();
@@ -1132,3 +1149,80 @@ function switchStatsMode(mode) {
     renderPageViewsChart(mode);
 }
 window.switchStatsMode = switchStatsMode;
+
+// =============================================
+// USUARIOS
+// =============================================
+function tipoLabelAdmin(t) {
+    t = String(t || '').toLowerCase().trim();
+    if (t === 'alfajor') return 'Alfajor';
+    if (t === 'delivery') return 'Delivery';
+    return 'Restaurante';
+}
+
+function renderUsers(json) {
+    const loader = document.getElementById('users-loader');
+    const contentEl = document.getElementById('users-content');
+    const list = document.getElementById('users-list');
+    const totalEl = document.getElementById('users-total-count');
+
+    const users = (json && json.users) ? json.users : [];
+
+    // Más recientes primero (por último acceso o registro, formato dd/MM/yyyy HH:mm).
+    const toSortable = (s) => {
+        const m = String(s || '').match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+        if (!m) return '';
+        return m[3] + m[2] + m[1] + (m[4] || '00') + (m[5] || '00');
+    };
+    users.sort((a, b) => toSortable(b.ultimoAcceso || b.registrado).localeCompare(toSortable(a.ultimoAcceso || a.registrado)));
+
+    if (totalEl) totalEl.textContent = users.length;
+
+    if (users.length === 0) {
+        list.innerHTML = `
+            <div class="stats-empty">
+                <i data-lucide="users"></i>
+                <p>Todavía no hay usuarios registrados</p>
+            </div>`;
+    } else {
+        let html = '<div class="users-list">';
+        users.forEach((u) => {
+            const initial = escapeHtml((u.nombre || u.email || '?').charAt(0).toUpperCase());
+            const avatar = u.foto
+                ? `<img src="${escapeHtml(u.foto)}" class="user-avatar" referrerpolicy="no-referrer" alt="">`
+                : `<div class="user-avatar user-avatar-fallback">${initial}</div>`;
+
+            const votes = u.votes || [];
+            const votesHtml = votes.length
+                ? votes.map(v => `
+                    <div class="user-vote">
+                        <span class="user-vote-name">${escapeHtml(v.vota)}</span>
+                        <span class="user-vote-tipo">${escapeHtml(tipoLabelAdmin(v.tipo))}</span>
+                        <span class="user-vote-score">${escapeHtml(v.puntaje)}</span>
+                        <span class="user-vote-date">${escapeHtml(v.timestamp || '')}</span>
+                    </div>`).join('')
+                : '<div class="user-vote-empty">Sin votos todavía</div>';
+
+            html += `
+                <div class="user-card">
+                    <div class="user-head">
+                        ${avatar}
+                        <div class="user-meta">
+                            <div class="user-name">${escapeHtml(u.nombre || '(sin nombre)')}</div>
+                            <div class="user-email">${escapeHtml(u.email)}</div>
+                            <div class="user-dates">Registrado: ${escapeHtml(u.registrado || '—')} · Último acceso: ${escapeHtml(u.ultimoAcceso || '—')}</div>
+                        </div>
+                        <div class="user-votecount">${votes.length}<span>votos</span></div>
+                    </div>
+                    <div class="user-votes">${votesHtml}</div>
+                </div>`;
+        });
+        html += '</div>';
+        list.innerHTML = html;
+    }
+
+    if (loader) loader.style.display = 'none';
+    if (contentEl) contentEl.style.display = 'block';
+    if (window.lucide) lucide.createIcons();
+}
+window.renderUsers = renderUsers;

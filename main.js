@@ -6,9 +6,7 @@ const CFG = window.COMER_CONFIG || {};
 // --- CONFIG & DATA ---
 const CONFIG = {
     mainDataSheet: CFG.MAIN_DATA_SHEET,
-    votesSheet: CFG.VOTES_SHEET,
     alfajoresSheet: CFG.ALFAJORES_SHEET,
-    alfajoresVotesSheet: CFG.ALFAJORES_VOTES_SHEET,
     tabsData: {
         presencial: ['ranking', 'map'],
         delivery: ['ranking'],
@@ -17,8 +15,7 @@ const CONFIG = {
 };
 
 const TRACKING_URL = CFG.TRACKING_URL;
-const VOTE_FORM_URL = CFG.VOTE_FORM_URL || '';
-const VOTE_FORM_URL_ALFAJOR = CFG.VOTE_FORM_URL_ALFAJOR || '';
+const SCRIPT_URL = CFG.SCRIPT_URL || '';
 const INITIAL_PHOTOS_LIMIT = CFG.INITIAL_PHOTOS_LIMIT || 6;
 const DEBUG = !!CFG.DEBUG;
 
@@ -94,6 +91,7 @@ let lightboxIndex = 0;
 let lightboxPreviousFocus = null;
 let lightboxTouchStartX = null;
 let currentDetailRestaurantName = '';
+let currentDetailItem = null;
 
 // IntersectionObserver to pause/resume top-3 shimmer animation
 let topShimmerObserver = null;
@@ -183,12 +181,9 @@ function showErrorBanner(message, retry) {
 
 async function fetchData() {
     try {
-        const [mainData, votesData] = await Promise.all([
-            fetchSheet(CONFIG.mainDataSheet),
-            fetchSheet(CONFIG.votesSheet).catch(() => [])
-        ]);
+        const mainData = await fetchSheet(CONFIG.mainDataSheet);
 
-        scheduleIdle(() => processVotes(votesData));
+        scheduleIdle(fetchPublicVotes);
 
         if (isValidData(mainData)) {
             const hasName = Object.keys(mainData[0]).some(k => k === 'name' || k === 'nombre');
@@ -250,12 +245,7 @@ async function fetchData() {
 async function fetchAlfajores() {
     if (alfajoresLoaded) return;
     try {
-        const [alfData, votesData] = await Promise.all([
-            fetchSheet(CONFIG.alfajoresSheet),
-            CONFIG.alfajoresVotesSheet ? fetchSheet(CONFIG.alfajoresVotesSheet).catch(() => []) : Promise.resolve([])
-        ]);
-
-        publicVotesAlfajor = buildVotes(votesData, 'alfajor a votar');
+        const alfData = await fetchSheet(CONFIG.alfajoresSheet);
 
         if (isValidData(alfData)) {
             const firstRowKeys = Object.keys(alfData[0]);
@@ -308,26 +298,57 @@ function scheduleIdle(fn) {
     }
 }
 
-function buildVotes(votesData, nameKey) {
-    const store = {};
-    if (!votesData || votesData.length === 0) return store;
-    votesData.forEach(v => {
-        const name = (v[nameKey] || '').trim().toLowerCase();
-        const score = parseFloat(v['puntuar']);
-        if (name && !isNaN(score)) {
-            if (!store[name]) store[name] = { total: 0, count: 0 };
-            store[name].total += score;
-            store[name].count++;
-        }
-    });
-    Object.keys(store).forEach(key => {
-        store[key].avg = (store[key].total / store[key].count).toFixed(1);
-    });
-    return store;
+/**
+ * Carga los promedios públicos AGREGADOS desde el backend (sin emails).
+ * Reemplaza la antigua lectura por CSV de la pestaña de votos.
+ */
+async function fetchPublicVotes() {
+    if (!SCRIPT_URL) return;
+    try {
+        const res = await fetch(SCRIPT_URL + '?action=publicVotes');
+        const json = await res.json();
+        publicVotes = (json && json.restaurants) ? json.restaurants : {};
+        publicVotesAlfajor = (json && json.alfajores) ? json.alfajores : {};
+        refreshPublicScoreBox();
+    } catch (e) {
+        if (DEBUG) console.warn('[Votes] No se pudieron cargar los votos públicos:', e);
+    }
 }
 
-function processVotes(votesData) {
-    publicVotes = buildVotes(votesData, 'lugar a votar');
+/**
+ * Si hay un detalle abierto, refresca el cuadro "Puntaje del Público" con los
+ * valores recién cargados (los votos llegan async, tras el render del detalle).
+ */
+function refreshPublicScoreBox() {
+    if (!currentDetailItem) return;
+    const box = document.querySelector('.public-score-box');
+    if (!box) return;
+    const isAlf = !!currentDetailItem.isAlfajor;
+    const store = isAlf ? publicVotesAlfajor : publicVotes;
+    const data = store[(currentDetailItem.name || '').trim().toLowerCase()];
+    const count = data ? data.count : 0;
+    const valEl = box.querySelector('.score-value');
+    const pillEl = box.querySelector('.votes-pill');
+    if (valEl) valEl.textContent = data ? data.avg : '-';
+    if (pillEl) pillEl.textContent = count + ' ' + (count === 1 ? 'voto' : 'votos');
+}
+
+/**
+ * Abre el modal de voto para un ítem (deriva el tipo de su modalidad).
+ */
+function openVoteModal(res) {
+    if (!window.ComerVote) return;
+    const tipo = res.isAlfajor ? 'alfajor'
+        : ((res.presencialDelivery === 'D' || res.presencialDelivery === 'L') ? 'delivery' : 'restaurant');
+    ComerVote.open({
+        name: res.name,
+        tipo: tipo,
+        onDone: (agg) => {
+            const store = res.isAlfajor ? publicVotesAlfajor : publicVotes;
+            store[(res.name || '').trim().toLowerCase()] = { avg: agg.avg, count: agg.count };
+            refreshPublicScoreBox();
+        }
+    });
 }
 
 async function filterByMode() {
@@ -932,6 +953,7 @@ function showDetail(res, updateUrl = true) {
     }
 
     currentDetailRestaurantName = res.name || '';
+    currentDetailItem = res;
     updateMetaForDetail(res);
 
     const visitDate = res.date || res.fecha || '';
@@ -955,7 +977,6 @@ function showDetail(res, updateUrl = true) {
     const voteData = votesStore[voteKey];
     const publicScore = voteData ? voteData.avg : '-';
     const voteCount = voteData ? voteData.count : 0;
-    const voteFormUrl = isAlf ? VOTE_FORM_URL_ALFAJOR : VOTE_FORM_URL;
 
     // Web del alfajor (normalizada con protocolo)
     const webUrl = res.web || '';
@@ -1046,10 +1067,10 @@ function showDetail(res, updateUrl = true) {
                         </div>
                     </div>
 
-                    ${voteFormUrl ? `<button class="vote-btn" type="button" id="vote-btn">
+                    <button class="vote-btn" type="button" id="vote-btn">
                         <i data-lucide="star" aria-hidden="true"></i>
                         <span>Votá acá</span>
-                    </button>` : ''}
+                    </button>
                 </div>
 
                 ${isAlf ? '' : `<p class="detail-location">${safeLocation}</p>`}
@@ -1083,10 +1104,8 @@ function showDetail(res, updateUrl = true) {
     `;
 
     const voteBtn = document.getElementById('vote-btn');
-    if (voteBtn && voteFormUrl) {
-        voteBtn.addEventListener('click', () => {
-            window.open(voteFormUrl, '_blank', 'noopener');
-        });
+    if (voteBtn) {
+        voteBtn.addEventListener('click', () => openVoteModal(res));
     }
 
     debouncedCreateIcons();
@@ -1143,6 +1162,7 @@ function toggleHome(updateUrl = true) {
 
     restoreOriginalMeta();
     currentDetailRestaurantName = '';
+    currentDetailItem = null;
 
     if (updateUrl) {
         try {
@@ -1386,6 +1406,68 @@ function setupSettings() {
     }
 }
 
+// --- AUTH UI (login / perfil dentro del menú de settings) ---
+
+const GSI_BTN_OPTS = { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', width: 220 };
+
+function setupAuthUI() {
+    if (!window.ComerAuth) return;
+    const el = document.getElementById('auth-menu-section');
+    ComerAuth.subscribe((user) => renderAuthMenu(el, user));
+
+    // GIS no siempre renderiza bien el botón en un contenedor display:none;
+    // lo re-renderizamos al abrir el menú de settings.
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', () => {
+            if (window.ComerAuth && !ComerAuth.isLoggedIn()) {
+                const signin = document.getElementById('auth-signin');
+                if (signin) ComerAuth.renderButton(signin, GSI_BTN_OPTS);
+            }
+        });
+    }
+
+    ComerAuth.init();
+}
+
+function renderAuthMenu(el, user) {
+    if (!el) return;
+
+    if (!user) {
+        el.innerHTML = `
+            <div class="auth-menu-divider"></div>
+            <div class="auth-menu-signin">
+                <span class="auth-menu-hint">Iniciá sesión para votar</span>
+                <div id="auth-signin"></div>
+            </div>
+        `;
+        ComerAuth.renderButton(document.getElementById('auth-signin'), GSI_BTN_OPTS);
+        return;
+    }
+
+    const initial = escapeHtml((user.name || user.email || '?').charAt(0).toUpperCase());
+    const avatar = user.picture
+        ? `<img src="${escapeHtml(user.picture)}" alt="" class="auth-avatar" referrerpolicy="no-referrer">`
+        : `<div class="auth-avatar auth-avatar-fallback">${initial}</div>`;
+
+    el.innerHTML = `
+        <div class="auth-menu-divider"></div>
+        <div class="auth-menu-user">
+            ${avatar}
+            <div class="auth-menu-user-info">
+                <div class="auth-menu-user-name">${escapeHtml(user.name || '')}</div>
+                <div class="auth-menu-user-email">${escapeHtml(user.email || '')}</div>
+            </div>
+        </div>
+        <a href="perfil.html" class="auth-menu-item" role="menuitem"><i data-lucide="user" aria-hidden="true"></i> Mi perfil</a>
+        <button type="button" class="auth-menu-item" id="auth-logout" role="menuitem"><i data-lucide="log-out" aria-hidden="true"></i> Cerrar sesión</button>
+    `;
+
+    const logoutBtn = document.getElementById('auth-logout');
+    if (logoutBtn) logoutBtn.addEventListener('click', () => ComerAuth.logout());
+
+    debouncedCreateIcons();
+}
+
 // --- INITIALIZATION ---
 
 function cacheDOMElements() {
@@ -1514,6 +1596,7 @@ function initApp() {
     setupLightbox();
     setupModeSwitcher();
     setupFilters();
+    setupAuthUI();
 
     backBtn.addEventListener('click', () => toggleHome(true));
 

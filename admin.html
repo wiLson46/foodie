@@ -15,7 +15,7 @@
         rel="stylesheet">
 
     <!-- CSS -->
-    <link rel="stylesheet" href="style.css?v=1.9">
+    <link rel="stylesheet" href="style.css?v=2.0">
 
     <!-- Libraries -->
     <script src="https://unpkg.com/lucide@latest" defer></script>
@@ -979,6 +979,37 @@
                 </div>
 
                 <!-- =======================================
+                     SECTION: Usuarios
+                     ======================================= -->
+                <div class="admin-section" id="section-users">
+                    <div class="section-header" onclick="toggleSection('users')">
+                        <div class="section-header-left">
+                            <div class="section-icon">
+                                <i data-lucide="users"></i>
+                            </div>
+                            <div>
+                                <div class="section-title">Usuarios</div>
+                                <div class="section-subtitle">Usuarios registrados con Google y sus votos</div>
+                            </div>
+                        </div>
+                        <i data-lucide="chevron-down" class="section-chevron" id="chevron-users"></i>
+                    </div>
+                    <div class="section-body" id="body-users">
+                        <div id="users-loader" class="admin-loader" style="padding: 2rem;">
+                            <div class="spinner-large"></div>
+                            <p>Cargando usuarios...</p>
+                        </div>
+                        <div id="users-content" style="display: none;">
+                            <div class="stats-total-badge">
+                                Usuarios registrados
+                                <strong id="users-total-count">0</strong>
+                            </div>
+                            <div id="users-list"><!-- Dynamically populated --></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- =======================================
                      SECTION B: Nueva Visita
                      ======================================= -->
                 <div class="admin-section" id="section-add">
@@ -1252,8 +1283,8 @@
     </script>
 
     <!-- Admin JS -->
-    <script src="config.js?v=1.8"></script>
-    <script src="admin.js?v=1.6"></script>
+    <script src="config.js?v=2.0"></script>
+    <script src="admin.js?v=2.0"></script>
 </body>
 
 </html>
