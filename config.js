@@ -14,7 +14,7 @@ window.COMER_CONFIG = {
     // Client ID de OAuth 2.0 (Web application) creado en Google Cloud Console.
     // Authorized JavaScript origins debe incluir https://wilson46.github.io y, para dev,
     // http://localhost:8000 / http://127.0.0.1:8000.
-    GOOGLE_CLIENT_ID: 'PEGAR_CLIENT_ID.apps.googleusercontent.com',
+    GOOGLE_CLIENT_ID: '1016739440960-m9hh2gv6r3aj0c9lc9v8ic1h5u1i393k.apps.googleusercontent.com',
 
     // --- Voto público ---
     // Los promedios públicos se sirven AGREGADOS (sin emails) desde el backend

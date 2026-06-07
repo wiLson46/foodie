@@ -1290,6 +1290,17 @@ function getStats() {
 // =============================================
 
 /**
+ * Ejecutar UNA vez desde el editor de Apps Script para autorizar el permiso de
+ * "conexión a servicio externo" (script.external_request) que usa la verificación
+ * del token de Google. Tras aceptar el permiso, el web app ya puede verificar
+ * tokens (no hace falta redeploy). Después se puede ignorar.
+ */
+function forceAuth() {
+  var r = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=test', { muteHttpExceptions: true });
+  Logger.log('forceAuth OK — HTTP ' + r.getResponseCode());
+}
+
+/**
  * Verifica un ID token (JWT) de Google contra el endpoint tokeninfo.
  * Chequea aud (== GOOGLE_CLIENT_ID), iss, exp y email_verified.
  * Devuelve { email, name, picture, sub } o lanza error.
