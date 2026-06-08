@@ -1453,6 +1453,14 @@ function renderAuthMenu(el, user) {
         ? `<img src="${escapeHtml(user.picture)}" alt="" class="auth-avatar" referrerpolicy="no-referrer">`
         : `<div class="auth-avatar auth-avatar-fallback">${initial}</div>`;
 
+    // Atajo al panel admin: solo visible para emails en la allowlist (ADMIN_EMAILS de
+    // config.js). Es solo UX; la seguridad real la valida el backend (Code.gs > requireAdmin).
+    const adminEmails = (window.COMER_CONFIG && window.COMER_CONFIG.ADMIN_EMAILS) || [];
+    const isAdmin = !!user.email && adminEmails.indexOf(String(user.email).toLowerCase()) !== -1;
+    const adminItem = isAdmin
+        ? `<a href="admin.html" class="auth-menu-item" role="menuitem"><i data-lucide="shield" aria-hidden="true"></i> Admin</a>`
+        : '';
+
     el.innerHTML = `
         <div class="auth-menu-divider"></div>
         <div class="auth-menu-user">
@@ -1463,6 +1471,7 @@ function renderAuthMenu(el, user) {
             </div>
         </div>
         <a href="perfil.html" class="auth-menu-item" role="menuitem"><i data-lucide="user" aria-hidden="true"></i> Mi perfil</a>
+        ${adminItem}
         <button type="button" class="auth-menu-item" id="auth-logout" role="menuitem"><i data-lucide="log-out" aria-hidden="true"></i> Cerrar sesión</button>
     `;
 

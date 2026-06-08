@@ -967,6 +967,11 @@ function escapeHtml(str) {
 // =============================================
 const THUMB_MAX_WIDTH = 400;       // igual que generate_thumbnails.py
 const THUMB_JPEG_QUALITY = 0.6;    // ≈ quality=60
+// Tope del ORIGINAL antes de subir: una foto de celular pesa varios MB y, en base64,
+// hacía fallar el POST a Apps Script con "load failed". Si supera este lado largo se
+// re-escala y recomprime a JPEG; las fotos por debajo del tope se suben tal cual.
+const ORIGINAL_MAX_WIDTH = 2560;
+const ORIGINAL_JPEG_QUALITY = 0.85;
 
 // Estado por "scope": new-resto | new-alfajor | edit-resto-<idx> | edit-alf-<idx>
 // { existing: [paths], pending: [{ id, file, previewUrl }] }
@@ -1109,6 +1114,37 @@ function readFileBase64(file) {
     });
 }
 
+// Prepara el ORIGINAL para subir. Si el lado largo supera ORIGINAL_MAX_WIDTH lo
+// re-escala con Canvas y lo recomprime a JPEG (acota el payload para que el POST no
+// falle con "load failed"); si no, lo sube tal cual con su extensión original.
+// Devuelve { b64, ext }.
+async function makeUploadOriginal(file, fallbackExt) {
+    const bmp = await loadBitmap(file);
+    const iw = bmp.width || bmp.naturalWidth;
+    const ih = bmp.height || bmp.naturalHeight;
+    const longEdge = Math.max(iw, ih);
+
+    if (longEdge <= ORIGINAL_MAX_WIDTH) {
+        if (bmp.close) { try { bmp.close(); } catch (e) {} }
+        return { b64: await readFileBase64(file), ext: fallbackExt };
+    }
+
+    const scale = ORIGINAL_MAX_WIDTH / longEdge;
+    const w = Math.max(1, Math.round(iw * scale));
+    const h = Math.max(1, Math.round(ih * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.fillStyle = '#ffffff';           // flatten alpha
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(bmp, 0, 0, w, h);
+    if (bmp.close) { try { bmp.close(); } catch (e) {} }
+    return { b64: canvas.toDataURL('image/jpeg', ORIGINAL_JPEG_QUALITY).split(',')[1], ext: 'jpg' };
+}
+
 function folderFromFecha(fecha) {
     const m = (fecha || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (m) return `${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}-${m[3]}`;
@@ -1143,16 +1179,16 @@ async function uploadPendingPhotos(scope, folder) {
     for (let i = 0; i < total; i++) {
         const file = st.pending[i].file;
         const { name, ext } = buildPhotoName(file);
-        const [thumbB64, originalB64] = await Promise.all([
+        const [thumbB64, original] = await Promise.all([
             makeThumbBase64(file),
-            readFileBase64(file)
+            makeUploadOriginal(file, ext)
         ]);
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
                 action: 'uploadPhotos',
                 credential,
-                folder, name, ext, originalB64, thumbB64
+                folder, name, ext: original.ext, originalB64: original.b64, thumbB64
             })
         });
         const result = await res.json();
