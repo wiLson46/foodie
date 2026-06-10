@@ -502,7 +502,7 @@ function renderRanking() {
                     <div class="ranking-date-box">
                         <div class="date-label">${currentMode === 'alfajores' ? 'PROBADO EL' : 'VISITADO EL'}</div>
                         <div class="date-value">${safeDate}</div>
-                    </div>` : ''}
+                    </div>` : (currentMode === 'alfajores' ? `<div class="coming-soon-badge">Se vienen cositas...</div>` : '')}
                 </div>
                 ${currentMode === 'alfajores' ? '' : `<p class="restaurant-location">${safeLocation}</p>`}
             </div>
@@ -1055,7 +1055,7 @@ function showDetail(res, updateUrl = true) {
                 ${visitDate ? `<div class="detail-date-box">
                     <div class="date-label">${isAlf ? 'PROBADO EL' : 'VISITADO EL'}</div>
                     <div class="date-value">${safeDate}</div>
-                </div>` : ''}
+                </div>` : (isAlf ? `<div class="coming-soon-badge">Se vienen cositas...</div>` : '')}
 
                 <div class="scores-wrapper">
                     <div class="detail-score-box">
