@@ -506,10 +506,10 @@ function renderRanking() {
                 </div>
                 ${currentMode === 'alfajores' ? '' : `<p class="restaurant-location">${safeLocation}</p>`}
             </div>
-            <div class="score-box">
+            ${(currentMode === 'alfajores' && !visitDate) ? '' : `<div class="score-box">
                 <div class="score-label">Puntaje</div>
                 <div class="score-value">${safeRating}</div>
-            </div>
+            </div>`}
             <i data-lucide="arrow-right-circle" aria-hidden="true"></i>
         `;
         const handler = () => showDetail(res);

@@ -194,6 +194,12 @@ async function initAdmin() {
 
         statusText.textContent = `✅ ${adminData.restaurants.length} restaurantes cargados`;
         statusText.style.color = '#2ecc71';
+        const statusAlfajores = document.getElementById('status-text-alfajores');
+        if (statusAlfajores) {
+            statusAlfajores.textContent = `🍫 ${(adminData.alfajores || []).length} alfajores cargados`;
+            statusAlfajores.style.color = '#2ecc71';
+            statusAlfajores.style.display = '';
+        }
 
         if (window.lucide) lucide.createIcons();
 
