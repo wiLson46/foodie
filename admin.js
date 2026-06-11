@@ -408,10 +408,15 @@ function createRestaurantCard(r, globalIdx) {
             <div class="admin-form-group field-full">${photoUploaderHTML('edit-resto-' + globalIdx, r.fotos)}</div>
         </div>
 
-        <button type="button" class="admin-btn btn-save" id="btn-save-${globalIdx}" onclick="saveRestaurant(${globalIdx})">
+        <button type="button" class="admin-btn btn-save btn-inline-spin" id="btn-save-${globalIdx}" onclick="saveRestaurant(${globalIdx})">
             <span class="btn-label"><i data-lucide="save"></i> Guardar Cambios</span>
             <div class="btn-spinner"></div>
         </button>
+        <div class="save-status" id="save-status-${globalIdx}">
+            <span class="save-status-dot"></span>
+            <span class="save-status-progress"><i></i></span>
+            <span class="save-status-text"></span>
+        </div>
     </div>
     `;
 }
@@ -456,10 +461,15 @@ async function saveRestaurant(idx) {
         return;
     }
 
+    const statusId = `save-status-${idx}`;
     setButtonLoading(btn, true);
+    setSaveStatus(statusId, 'Preparando…', 'working', 0);
 
     try {
-        data.fotos = await collectFotos('edit-resto-' + idx, data.fecha);
+        data.fotos = await collectFotos('edit-resto-' + idx, data.fecha,
+            (msg, pct) => setSaveStatus(statusId, msg, 'working', pct));
+
+        setSaveStatus(statusId, 'Guardando cambios…', 'working', 100);
 
         const credential = await getCred();
         const res = await fetch(SCRIPT_URL, {
@@ -477,6 +487,8 @@ async function saveRestaurant(idx) {
         if (result.success) {
             Object.assign(adminData.restaurants[idx], data);
             showToast(`✅ "${data.name}" guardado con éxito`, 'success');
+            setSaveStatus(statusId, 'Guardado con éxito', 'success');
+            setTimeout(() => setSaveStatus(statusId, '', 'hide'), 4000);
 
             const block = document.getElementById(`block-${idx}`);
             if (block) {
@@ -485,11 +497,13 @@ async function saveRestaurant(idx) {
             }
         } else {
             showToast(`❌ Error: ${result.message}`, 'error');
+            setSaveStatus(statusId, result.message || 'No se pudo guardar', 'error');
         }
 
     } catch (error) {
         console.error('[Admin] Error guardando restaurante:', error);
         showToast(`❌ Error de conexión: ${error.message}`, 'error');
+        setSaveStatus(statusId, error.message || 'Error de conexión', 'error');
     } finally {
         setButtonLoading(btn, false);
     }
@@ -614,10 +628,15 @@ function createAlfajorCard(a, idx) {
             <div class="admin-form-group field-full">${photoUploaderHTML('edit-alf-' + idx, a.fotos)}</div>
         </div>
 
-        <button type="button" class="admin-btn btn-save" id="alf-btn-save-${idx}" onclick="saveAlfajor(${idx})">
+        <button type="button" class="admin-btn btn-save btn-inline-spin" id="alf-btn-save-${idx}" onclick="saveAlfajor(${idx})">
             <span class="btn-label"><i data-lucide="save"></i> Guardar Cambios</span>
             <div class="btn-spinner"></div>
         </button>
+        <div class="save-status" id="alf-save-status-${idx}">
+            <span class="save-status-dot"></span>
+            <span class="save-status-progress"><i></i></span>
+            <span class="save-status-text"></span>
+        </div>
     </div>
     `;
 }
@@ -641,10 +660,15 @@ async function saveAlfajor(idx) {
 
     if (!confirm(`¿Guardar cambios en "${data.name}"?`)) return;
 
+    const statusId = `alf-save-status-${idx}`;
     setButtonLoading(btn, true);
+    setSaveStatus(statusId, 'Preparando…', 'working', 0);
 
     try {
-        data.fotos = await collectFotos('edit-alf-' + idx, '');
+        data.fotos = await collectFotos('edit-alf-' + idx, '',
+            (msg, pct) => setSaveStatus(statusId, msg, 'working', pct));
+
+        setSaveStatus(statusId, 'Guardando cambios…', 'working', 100);
 
         const credential = await getCred();
         const res = await fetch(SCRIPT_URL, {
@@ -662,6 +686,8 @@ async function saveAlfajor(idx) {
         if (result.success) {
             Object.assign(adminData.alfajores[idx], data);
             showToast(`✅ "${data.name}" guardado con éxito`, 'success');
+            setSaveStatus(statusId, 'Guardado con éxito', 'success');
+            setTimeout(() => setSaveStatus(statusId, '', 'hide'), 4000);
 
             const block = document.getElementById(`alfajor-block-${idx}`);
             if (block) {
@@ -670,10 +696,12 @@ async function saveAlfajor(idx) {
             }
         } else {
             showToast(`❌ Error: ${result.message}`, 'error');
+            setSaveStatus(statusId, result.message || 'No se pudo guardar', 'error');
         }
     } catch (error) {
         console.error('[Admin] Error guardando alfajor:', error);
         showToast(`❌ Error de conexión: ${error.message}`, 'error');
+        setSaveStatus(statusId, error.message || 'Error de conexión', 'error');
     } finally {
         setButtonLoading(btn, false);
     }
@@ -958,6 +986,20 @@ function setButtonLoading(btn, loading) {
     }
 }
 
+// Actualiza la línea de estado debajo de un botón Guardar.
+// state: 'working' (spinner) | 'success' | 'error' | 'hide'
+// pct: 0–100 opcional → mueve la barra de progreso (solo en 'working')
+function setSaveStatus(statusId, message, state = 'working', pct = null) {
+    const el = document.getElementById(statusId);
+    if (!el) return;
+    if (state === 'hide') { el.className = 'save-status'; return; }
+    el.className = `save-status show ${state}`;
+    const txt = el.querySelector('.save-status-text');
+    if (txt) txt.textContent = message || '';
+    const bar = el.querySelector('.save-status-progress > i');
+    if (bar && pct != null) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+
 function escapeHtml(str) {
     if (!str) return '';
     return String(str)
@@ -1171,7 +1213,8 @@ function buildPhotoName(file) {
 }
 
 // Sube secuencialmente las fotos pendientes del scope. Devuelve las rutas nuevas.
-async function uploadPendingPhotos(scope, folder) {
+// onStatus(text, pct) opcional → reporta el avance a la línea de estado del botón.
+async function uploadPendingPhotos(scope, folder, onStatus) {
     const st = photoState[scope];
     if (!st || !st.pending.length) return [];
 
@@ -1183,6 +1226,7 @@ async function uploadPendingPhotos(scope, folder) {
     const total = st.pending.length;
     const credential = await getCred();
     for (let i = 0; i < total; i++) {
+        if (onStatus) onStatus(`Subiendo foto ${i + 1} de ${total}…`, Math.round((i / total) * 100));
         const file = st.pending[i].file;
         const { name, ext } = buildPhotoName(file);
         const [thumbB64, original] = await Promise.all([
@@ -1202,17 +1246,19 @@ async function uploadPendingPhotos(scope, folder) {
             throw new Error(result.message || 'Falló la subida de una foto.');
         }
         newPaths.push(result.path);
-        if (bar) bar.style.width = Math.round(((i + 1) / total) * 100) + '%';
+        const pct = Math.round(((i + 1) / total) * 100);
+        if (bar) bar.style.width = pct + '%';
+        if (onStatus) onStatus(`Subiendo foto ${i + 1} de ${total}…`, pct);
     }
     if (progress) setTimeout(() => { progress.style.display = 'none'; if (bar) bar.style.width = '0%'; }, 600);
     return newPaths;
 }
 
 // Sube lo pendiente y devuelve el string final de `fotos` (existentes + nuevas).
-async function collectFotos(scope, fecha) {
+async function collectFotos(scope, fecha, onStatus) {
     const st = photoState[scope] || initPhotoScope(scope, '');
     const folder = folderFromFecha(fecha);
-    const newPaths = await uploadPendingPhotos(scope, folder);
+    const newPaths = await uploadPendingPhotos(scope, folder, onStatus);
     st.pending.forEach(p => { try { URL.revokeObjectURL(p.previewUrl); } catch (e) {} });
     st.pending = [];
     st.existing = st.existing.concat(newPaths);
