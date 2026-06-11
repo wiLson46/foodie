@@ -457,11 +457,15 @@ async function saveRestaurant(idx) {
         return;
     }
 
-    if (!confirm(`¿Guardar cambios en "${data.name}"?`)) {
+    const statusId = `save-status-${idx}`;
+    // Feedback inmediato al tocar (confirma que el tap se registró, sobre todo en mobile).
+    setSaveStatus(statusId, 'Confirmá para guardar…', 'working', 0);
+
+    if (!(await appConfirm(`¿Guardar cambios en "${data.name}"?`))) {
+        setSaveStatus(statusId, '', 'hide');
         return;
     }
 
-    const statusId = `save-status-${idx}`;
     setButtonLoading(btn, true);
     setSaveStatus(statusId, 'Preparando…', 'working', 0);
 
@@ -658,9 +662,14 @@ async function saveAlfajor(idx) {
         return;
     }
 
-    if (!confirm(`¿Guardar cambios en "${data.name}"?`)) return;
-
     const statusId = `alf-save-status-${idx}`;
+    setSaveStatus(statusId, 'Confirmá para guardar…', 'working', 0);
+
+    if (!(await appConfirm(`¿Guardar cambios en "${data.name}"?`))) {
+        setSaveStatus(statusId, '', 'hide');
+        return;
+    }
+
     setButtonLoading(btn, true);
     setSaveStatus(statusId, 'Preparando…', 'working', 0);
 
@@ -984,6 +993,39 @@ function setButtonLoading(btn, loading) {
         btn.classList.remove('loading');
         btn.disabled = false;
     }
+}
+
+// Confirmación propia (Promise<boolean>). Reemplaza a confirm() nativo, que en varios
+// webviews móviles está bloqueado y devuelve false sin mostrar nada → el guardado se
+// cortaba en silencio ("no pasa nada al tocar Guardar").
+function appConfirm(message, okLabel = 'Guardar') {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('confirm-overlay');
+        const msgEl = document.getElementById('confirm-message');
+        const okBtn = document.getElementById('confirm-ok');
+        const cancelBtn = document.getElementById('confirm-cancel');
+        // Fallback por si el modal no existe en el DOM: no bloquear el flujo.
+        if (!overlay || !msgEl || !okBtn || !cancelBtn) { resolve(true); return; }
+
+        msgEl.textContent = message;
+        okBtn.textContent = okLabel;
+        overlay.classList.add('show');
+
+        const cleanup = (result) => {
+            overlay.classList.remove('show');
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            overlay.removeEventListener('click', onBackdrop);
+            resolve(result);
+        };
+        const onOk = () => cleanup(true);
+        const onCancel = () => cleanup(false);
+        const onBackdrop = (e) => { if (e.target === overlay) cleanup(false); };
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        overlay.addEventListener('click', onBackdrop);
+    });
 }
 
 // Actualiza la línea de estado debajo de un botón Guardar.

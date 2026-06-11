@@ -438,6 +438,51 @@
             animation: toastOut 0.3s ease forwards;
         }
 
+        /* --- Modal de confirmación propio (reemplaza confirm() nativo, que se
+               bloquea en webviews móviles y devuelve false sin mostrar nada) --- */
+        .confirm-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            background: rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(2px);
+        }
+        .confirm-overlay.show { display: flex; }
+        .confirm-box {
+            background: var(--card-bg);
+            color: var(--text-main);
+            border-radius: 16px;
+            padding: 1.5rem;
+            width: 100%;
+            max-width: 360px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: toastIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .confirm-box p {
+            margin: 0 0 1.25rem;
+            font-size: 1rem;
+            line-height: 1.4;
+            font-weight: 600;
+        }
+        .confirm-actions {
+            display: flex;
+            gap: 0.6rem;
+        }
+        .confirm-actions .admin-btn { width: 100%; margin: 0; }
+        .confirm-cancel {
+            background: var(--card-bg);
+            color: var(--text-main);
+            border: 2px solid var(--border);
+        }
+        .confirm-ok {
+            background: var(--text-main);
+            color: var(--bg);
+        }
+
         @keyframes toastIn {
             from {
                 opacity: 0;
@@ -1310,6 +1355,17 @@
     <!-- Toast Container -->
     <div class="toast-container" id="toast-container"></div>
 
+    <!-- Modal de confirmación propio (no depende de confirm() nativo) -->
+    <div class="confirm-overlay" id="confirm-overlay">
+        <div class="confirm-box">
+            <p id="confirm-message"></p>
+            <div class="confirm-actions">
+                <button type="button" class="admin-btn confirm-cancel" id="confirm-cancel">Cancelar</button>
+                <button type="button" class="admin-btn confirm-ok" id="confirm-ok">Guardar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Dark Mode Logic (shared pattern) -->
     <script>
         const darkModeToggle = document.getElementById('dark-mode-toggle');
@@ -1352,9 +1408,9 @@
     </script>
 
     <!-- Admin JS -->
-    <script src="config.js?v=2.3"></script>
+    <script src="config.js?v=2.4"></script>
     <script src="auth.js?v=2.0"></script>
-    <script src="admin.js?v=2.3"></script>
+    <script src="admin.js?v=2.4"></script>
 </body>
 
 </html>
