@@ -6,7 +6,7 @@ window.COMER_CONFIG = {
     // Versión de la app. Se autoincrementa en cada commit vía el hook .githooks/pre-commit
     // (1.8 → 1.9 → 2.0 …; el minor va 0–9 y al llegar a 10 sube el major). Single source of
     // truth: se inyecta en los footers (elementos .app-version) de todas las páginas.
-    VERSION: '2.1',
+    VERSION: '2.2',
 
     SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwpKyJcHnDWDiSLZXz1_foSbxEKlyFyTqSaiK_22GzZUQuDLPLS_N078pU6aBR3_xy7/exec',
     TRACKING_URL: 'https://script.google.com/macros/s/AKfycbzliZeD8VmFGgCmvUMsm7MmwNDkvsIdsbF6RfY550eEW2Ls9VLHb1CnfljO_hAxaDt1/exec',

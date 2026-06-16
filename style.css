@@ -1232,6 +1232,41 @@ input:checked+.slider:before {
     color: var(--text-muted);
 }
 
+/* ========== Páginas utilitarias (perfil / carga / admin): nav, header y footer ========== */
+.nav-home-link {
+    margin-right: 0.5rem;
+    text-decoration: none;
+    display: inline-flex;
+}
+
+.footer--page {
+    margin-top: 3rem;
+}
+
+.carga-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.carga-header h1 {
+    font-family: var(--font-title);
+    font-size: 2rem;
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+}
+
+.carga-header h1 i {
+    color: var(--gold);
+}
+
+.perfil-loader p {
+    text-align: center;
+    color: var(--text-muted);
+}
+
 /* ========== PERFORMANCE: Reduce GPU load on mobile ========== */
 
 @media (max-width: 768px) {

@@ -282,12 +282,21 @@
 
         .dynamic-fields-container h3 {
             justify-content: flex-start;
+            font-family: var(--font-title);
+            margin-bottom: 1.5rem;
         }
 
         .carga-header h1 i, .dynamic-fields-container h3 i {
             width: 28px;
             height: 28px;
             color: var(--gold);
+        }
+
+        .restaurant-type-badge {
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--gold);
+            margin-top: 0.3rem;
         }
 
     </style>
@@ -312,7 +321,7 @@
                 </div>
             </div>
             
-            <a href="index.html" class="icon-btn" style="margin-right: 0.5rem; text-decoration: none; display: inline-flex" aria-label="Volver a Inicio">
+            <a href="index.html" class="icon-btn nav-home-link" aria-label="Volver a Inicio">
                 <i data-lucide="home"></i>
             </a>
         </nav>
@@ -322,7 +331,7 @@
                 <img src="./fotos/imagenes/logoB.png" alt="Comer.ar Logo" class="logo-img light-logo">
                 <img src="./fotos/imagenes/logoW.png" alt="Comer.ar Logo" class="logo-img dark-logo">
             </div>
-            <h1 style="font-family: var(--font-title); font-size: 2rem; margin-top: 1rem;">
+            <h1>
                 <i data-lucide="clipboard-edit"></i>
                 Carga de Reseña
             </h1>
@@ -367,16 +376,16 @@
                         <option value="" disabled selected>Selecciona primero una fecha</option>
                     </select>
                     <!-- Pequeña etiqueta que indica el Tipo (Delivery/Presencial) -->
-                    <small id="restaurant-type-badge" style="display: none; font-weight: 600; text-transform: uppercase; color: var(--gold); margin-top: 0.3rem;"></small>
+                    <small id="restaurant-type-badge" class="restaurant-type-badge" style="display: none;"></small>
                 </div>
 
                 <!-- Dynamic Score Fields -->
                 <div id="dynamic-fields" class="dynamic-fields-container">
-                    <h3 style="font-family: var(--font-title); margin-bottom: 1.5rem;">
+                    <h3>
                         <i data-lucide="star"></i>
                         Tus Puntajes
                     </h3>
-                    
+
                     <div class="form-group">
                         <label for="score-avg" class="form-label">
                             <i data-lucide="award"></i>
@@ -432,7 +441,7 @@
                     </div>
 
                     <div id="alfajor-fields" class="dynamic-fields-container show">
-                        <h3 style="font-family: var(--font-title); margin-bottom: 1.5rem;">
+                        <h3>
                             <i data-lucide="star"></i>
                             Tus Puntajes
                         </h3>
@@ -474,7 +483,7 @@
             </form>
         </main>
         
-        <footer class="footer" style="text-align: center; margin-top: 3rem; color: var(--text-muted); font-size: 0.9rem;">
+        <footer class="footer footer--page">
             <p>Copyright 2026 - Wild Ideas - V<span class="app-version">1.8</span></p>
         </footer>
 

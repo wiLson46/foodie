@@ -961,6 +961,70 @@
             display: block; height: 100%; width: 0;
             background: var(--gold); transition: width 0.25s;
         }
+
+        /* --- Gate de login (Google) --- */
+        .admin-gate {
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1.25rem;
+            padding: 3rem 1rem;
+            text-align: center;
+            min-height: 40vh;
+        }
+
+        .admin-gate p {
+            margin-bottom: 1rem;
+            color: var(--text-muted);
+        }
+
+        .admin-gate .gate-denied-text {
+            color: #e74c3c;
+        }
+
+        #admin-login-btn {
+            display: flex;
+            justify-content: center;
+        }
+
+        #admin-switch-account {
+            max-width: 220px;
+            margin: 0 auto;
+        }
+
+        /* --- Loader compacto (stats / usuarios) --- */
+        .admin-loader--compact {
+            padding: 2rem;
+        }
+
+        /* --- Asistente de carga (smart paste) --- */
+        .smart-paste-container {
+            margin-bottom: 1.5rem;
+            background: rgba(102, 126, 234, 0.05);
+            border: 2px dashed rgba(102, 126, 234, 0.3);
+            padding: 1rem;
+            border-radius: 14px;
+        }
+
+        .smart-paste-container .admin-label {
+            margin-bottom: 0.5rem;
+        }
+
+        #smart-paste {
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        /* --- Input de ID auto-generado --- */
+        .admin-input--auto {
+            background: rgba(0, 0, 0, 0.05);
+            font-weight: bold;
+            color: var(--gold);
+        }
+
+        /* --- Switcher de tipo de link --- */
+        #link-type-switcher {
+            margin-bottom: 1.25rem;
+        }
     </style>
 </head>
 
@@ -984,8 +1048,7 @@
                 </div>
             </div>
 
-            <a href="index.html" class="icon-btn"
-                style="margin-right: 0.5rem; text-decoration: none; display: inline-flex" aria-label="Volver a Inicio">
+            <a href="index.html" class="icon-btn nav-home-link" aria-label="Volver a Inicio">
                 <i data-lucide="home"></i>
             </a>
         </nav>
@@ -1007,17 +1070,16 @@
         <!-- Main Content -->
         <main class="admin-container">
             <!-- Gate de login (Google) — reemplaza la contraseña de admin -->
-            <div id="admin-gate"
-                style="display:none; flex-direction:column; align-items:center; justify-content:center; gap:1.25rem; padding:3rem 1rem; text-align:center; min-height:40vh;">
+            <div id="admin-gate" class="admin-gate" style="display:none;">
                 <div id="admin-gate-login">
-                    <p style="margin-bottom:1rem; color:var(--text-muted);">Iniciá sesión con tu cuenta de admin para
+                    <p>Iniciá sesión con tu cuenta de admin para
                         gestionar Comer.ar.</p>
-                    <div id="admin-login-btn" style="display:flex; justify-content:center;"></div>
+                    <div id="admin-login-btn"></div>
                 </div>
                 <div id="admin-gate-denied" style="display:none;">
-                    <p style="margin-bottom:1rem; color:#e74c3c;">La cuenta <strong id="admin-denied-email"></strong> no
+                    <p class="gate-denied-text">La cuenta <strong id="admin-denied-email"></strong> no
                         tiene permisos de admin.</p>
-                    <button class="admin-btn" id="admin-switch-account" style="max-width:220px; margin:0 auto;">Cambiar de
+                    <button class="admin-btn" id="admin-switch-account">Cambiar de
                         cuenta</button>
                 </div>
             </div>
@@ -1049,7 +1111,7 @@
                     </div>
                     <div class="section-body" id="body-stats">
                         <!-- Loading state for stats -->
-                        <div id="stats-loader" class="admin-loader" style="padding: 2rem;">
+                        <div id="stats-loader" class="admin-loader admin-loader--compact">
                             <div class="spinner-large"></div>
                             <p>Cargando estadísticas...</p>
                         </div>
@@ -1107,7 +1169,7 @@
                         <i data-lucide="chevron-down" class="section-chevron" id="chevron-users"></i>
                     </div>
                     <div class="section-body" id="body-users">
-                        <div id="users-loader" class="admin-loader" style="padding: 2rem;">
+                        <div id="users-loader" class="admin-loader admin-loader--compact">
                             <div class="spinner-large"></div>
                             <p>Cargando usuarios...</p>
                         </div>
@@ -1139,15 +1201,15 @@
                     </div>
                     <div class="section-body" id="body-add">
                         <form id="new-restaurant-form" onsubmit="return false;">
-                            <div class="admin-form-group smart-paste-container" style="margin-bottom: 1.5rem; background: rgba(102, 126, 234, 0.05); border: 2px dashed rgba(102, 126, 234, 0.3); padding: 1rem; border-radius: 14px;">
-                                <label class="admin-label" style="margin-bottom: 0.5rem;"><i data-lucide="bot"></i> Asistente de Carga (Opcional)</label>
-                                <textarea class="admin-textarea" id="smart-paste" placeholder="Pegá aquí el JSON generado por Gemini u otra IA para auto-completar el formulario..." style="min-height: 70px; background: rgba(255,255,255,0.5);"></textarea>
+                            <div class="admin-form-group smart-paste-container">
+                                <label class="admin-label"><i data-lucide="bot"></i> Asistente de Carga (Opcional)</label>
+                                <textarea class="admin-textarea" id="smart-paste" placeholder="Pegá aquí el JSON generado por Gemini u otra IA para auto-completar el formulario..."></textarea>
                             </div>
 
                             <div class="restaurant-fields-grid">
                                 <div class="admin-form-group">
                                     <label class="admin-label"><i data-lucide="hash"></i> ID</label>
-                                    <input type="text" class="admin-input" id="new-id" value="Auto" disabled style="background: rgba(0,0,0,0.05); font-weight: bold; color: var(--gold);">
+                                    <input type="text" class="admin-input admin-input--auto" id="new-id" value="Auto" disabled>
                                 </div>
                                 <div class="admin-form-group">
                                     <label class="admin-label"><i data-lucide="store"></i> Nombre *</label>
@@ -1229,7 +1291,7 @@
                             <div class="restaurant-fields-grid">
                                 <div class="admin-form-group">
                                     <label class="admin-label"><i data-lucide="hash"></i> ID</label>
-                                    <input type="text" class="admin-input" id="new-alfajor-id" value="Auto" disabled style="background: rgba(0,0,0,0.05); font-weight: bold; color: var(--gold);">
+                                    <input type="text" class="admin-input admin-input--auto" id="new-alfajor-id" value="Auto" disabled>
                                 </div>
                                 <div class="admin-form-group">
                                     <label class="admin-label"><i data-lucide="cookie"></i> Nombre *</label>
@@ -1270,7 +1332,7 @@
                         <i data-lucide="chevron-down" class="section-chevron" id="chevron-links"></i>
                     </div>
                     <div class="section-body" id="body-links">
-                        <div class="stats-toggle" id="link-type-switcher" style="margin-bottom: 1.25rem;">
+                        <div class="stats-toggle" id="link-type-switcher">
                             <button type="button" class="stats-toggle-btn active" data-link-type="restaurant" onclick="setLinkType('restaurant')">🍴 Restaurante</button>
                             <button type="button" class="stats-toggle-btn" data-link-type="alfajor" onclick="setLinkType('alfajor')">🍫 Alfajor</button>
                         </div>
@@ -1347,7 +1409,7 @@
         </main>
 
         <!-- Footer -->
-        <footer class="footer" style="text-align: center; margin-top: 3rem;">
+        <footer class="footer footer--page">
             <p>Copyright 2026 - Wild Ideas - V<span class="app-version">1.8</span></p>
         </footer>
     </div>
